@@ -1,0 +1,29 @@
+Dispositivos de red
+- Instalacion del controlador Ryu
+- Implementacion del switch C2
+
+sudo su
+apt-get install libpython2.7-dev
+(apt-get remove python-six)
+apt-get install python-pip
+pip install ryu
+(pip install --upgrade six)
+ryu -manager
+
+datapath te devuelve la version del protocolo que esta usando el enlace.
+
+Vamos a hacerle casito a Fabian.
+
+Lo primero es asignar direccion ip y mac a las interfaces. Para ello deberias usar un diccionario doble o un diccionario con tuplas, se puede leer un fichero csv que tenga esta confguracion
+
+El paquete no puede montarse un paquete de 0 el switch, pero no puede crear paquetes.
+
+El arp hay que reenviarlo, asi que tiene que hacerlo el datacenter.
+
+El paquete ARP lo tenemos que construir nosotros
+
+SWITCH DE CAPA 3
+PARA TRABAJO FINAL
+
+LAS VLANES SE CONSIGUEN TENIENDO CUIDADO
+DE NO POENR REGLAS QUE C

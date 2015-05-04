@@ -1,0 +1,46 @@
+if ( es ip )
+  if (es para el router)
+    ->es un ping (ICMP echo requets)
+      contestar ::escribir ICMP echo reply
+    -> contestar con icmp destino inalcanzable
+  else: cruza el router
+	buscar la entrada aplicable con el prefijo mas largo en
+	la tabla de enrutamiento
+
+
+
+
+
+* Conoce la MAC correspondiente al siguiente salto
+    add_flow(......)
+	Actualizar Mac origen
+	Actualizar MAc destino
+	Decrementar TTL
+	output por el puerto
+    sacar de la cola
+* No conoce la MAC 
+  peticion ARP
+  poner paquete en cola
+  respuesta ARP
+  sacar de la cola
+
+
+Port_to_ips[0]=(todo lo de ip!!!!!!!)
+    packet _in(self,ev)
+      If(ARP)
+	Port_to_ips[in_port][0]==dst
+	
+
+
+
+ip.dst 
+
+
+
+
+for route in tabla 
+  if routa[0]== and(ipdst, mask)
+    if ruta < 
+
+	ruta=route
+
