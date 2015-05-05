@@ -117,11 +117,14 @@ class L2Forwarding(app_manager.RyuApp):
 				    comprobacion=1
 				    if pkt_icmp:
 						self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
-				if comprobacion==0:
-					print("COMPROBACION==0")
-				elif eth.ethertype==ether.ETH_TYPE_ARP:
-					pkt_arp=pkt.get_protocol(arp.arp)
-					self.ARPPacket(pkt_arp,in_port,datapath)
+			if comprobacion==0:
+			entradas_router = self.ip_mac_port.keys()
+			for entradas in entradas_router :
+			if IPv4Address(pkt_ipv4.dst) in IPv4Network(ip_mac_port(entradas)[2]+"/" ip_mac_port(entradas)[0])
+			#print("COMPROBACION==0")
+		elif eth.ethertype==ether.ETH_TYPE_ARP:
+			pkt_arp=pkt.get_protocol(arp.arp)
+			self.ARPPacket(pkt_arp,in_port,datapath)
 		  #ipnetwork e ipaddres te dice si una ip esta en una red. lo que estabamos viendo el otro dia en
 		  #clase
 			#else
