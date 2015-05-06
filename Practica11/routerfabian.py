@@ -30,7 +30,7 @@ ip_mac_port = {1: ('255.255.255.0','00:00:00:00:01:01','192.168.1.1'),
 		       3: ('255.255.255.0','00:00:00:00:01:03','192.168.3.1'),
 		       4: ('255.255.255.0','00:00:00:00:01:04','192.168.4.1')}
 		       
-e = ethernet.ethernet(dst=mac.BROADCAST,
+e = ethernet.ethernet(dst=mac.BROADCAST_STR,
 		      src=ip_mac_port[1][1],
 		      ethertype=ether.ETH_TYPE_ARP)
 a = arp.arp(opcode=arp.ARP_REQUEST,
@@ -57,36 +57,46 @@ class L2Forwarding(app_manager.RyuApp):
     colaespera = [] #Atributo que guarda la cola
     #  Inserta una entrada a la tabla de flujo.
     def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
+		print port
 		#if (self.ip_mac_port[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
-		e = ethernet.ethernet(dst=mac.BROADCAST,
-				      src=self.ip_mac_port[in_port][1],
+		e = ethernet.ethernet(dst=mac.BROADCAST_STR ,
+				      src=self.ip_mac_port.get(port)[1],
 				      ethertype=ether.ETH_TYPE_ARP)
 		a = arp.arp(opcode=arp.ARP_REQUEST,
-			    src_mac=self.ip_mac_port[port][1], src_ip=source_ip,
-			    dst_mac=mac_lib.DONTCARE_STR, dst_ip=dest_ip)
+			    src_mac=self.ip_mac_port.get(port)[1], src_ip=source_ip, dst_ip=dest_ip)
 		
 		
 		p = packet.Packet()
 		p.add_protocol(e)
 		p.add_protocol(a)
+
 		self.send_packet(datapath, port,p)
     
     
     
     def IPPACKET(self, datapath, port,mac_dst, pkt):
 		pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
+		pkt_icmp=pkt.get_protocol(icmp.icmp)
 		#suponiendo que port es el puerto por el que va a salir
-						#poner la ip de destino
+		
+				#poner la ip de destino
+		print pkt_ipv4.dst
+		print pkt_ipv4.src
 		e = ethernet.ethernet(dst=mac_dst,
 				      src=self.ip_mac_port[port][1],
 				      ethertype=0x0800)
 		iper=ipv4.ipv4(dst=pkt_ipv4.dst,
 			    src=pkt_ipv4.src,
 			    proto=pkt_ipv4.proto)
-		
-		p = packet.Packet(pkt.data)
+		icmper=icmp.icmp(type_=pkt_icmp.type,
+                                    code=pkt_icmp.code,
+                                    csum=0,
+                                    data=pkt_icmp.data)
+
+		p = packet.Packet()
 		p.add_protocol(e)
 		p.add_protocol(iper)
+		p.add_protocol(icmper)
 		self.send_packet(datapath, port, p)
        
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
@@ -115,7 +125,7 @@ class L2Forwarding(app_manager.RyuApp):
 				  actions=actions,
 				  data=data)
 		datapath.send_msg(out)
-	
+		
     def ARPPacket(self,arp_msg,in_port,datapath):
 		if (self.ip_mac_port[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
 			e = ethernet.ethernet(dst=arp_msg.src_mac,
@@ -130,12 +140,14 @@ class L2Forwarding(app_manager.RyuApp):
 			self.send_packet(datapath, in_port,p)
 		#Procesar un ARPReply para hacer enrutamiento
 		elif arp_msg.opcode==arp.ARP_REPLY:
-			for paquetes in colaespera: #Buscamos en la lista para ver si hay paquetes en espera
+			print "gay"
+			for paquetes in self.colaespera: #Buscamos en la lista para ver si hay paquetes en espera
 				pkt_ipv4=paquetes.get_protocol(ipv4.ipv4) 
 				if(pkt_ipv4):
 					if (pkt_ipv4.dst==arp_msg.src_ip): #Si la ip de destino del paquete coincide con quien envio esa ip
-						
+						print "puta"
 						self.IPPACKET(datapath,in_port,arp_msg.src_mac,paquetes )
+						self.colaespera.remove(paquetes)
 						
     def ICMPPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
 		if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
@@ -191,7 +203,8 @@ class L2Forwarding(app_manager.RyuApp):
 			if comprobacion==0:
 				for entradas in entradas_router :
 					if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(self.ip_mac_port.get(entradas)[2]+"/"+ self.ip_mac_port.get(entradas)[0]):
-						self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,self.ip_mac_port.get(entradas),datapath)
+						self.colaespera.append(pkt)
+						self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,entradas,datapath)
 		elif eth.ethertype==ether.ETH_TYPE_ARP:
 			pkt_arp=pkt.get_protocol(arp.arp)
 			self.ARPPacket(pkt_arp,in_port,datapath)
