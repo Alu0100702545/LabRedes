@@ -8,7 +8,7 @@ apt-get install libpython2.7-dev
 apt-get install python-pip
 pip install ryu
 (pip install --upgrade six)
-ryu -manager
+ryu-manager <fichero>.py
 
 datapath te devuelve la version del protocolo que esta usando el enlace.
 
@@ -27,3 +27,17 @@ PARA TRABAJO FINAL
 
 LAS VLANES SE CONSIGUEN TENIENDO CUIDADO
 DE NO POENR REGLAS QUE C
+
+
+
+
+
+Principio del enrutamiento
+
+
+
+
+Primero ver por que puerta lo vamos a enviar. cuando tengamos esto 
+enviamos un mensaje ARP y guardamos dicho oaquete
+en un lista. cuando no llegue un mensaje de ARP_REPLY buscamos en la cola 
+el/los que tenga la misma ip y lo enviamos con la mac que recibamos

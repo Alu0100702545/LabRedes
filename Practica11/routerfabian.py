@@ -1,5 +1,6 @@
 #!/usr/bin/python
 #coding=utf-8
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
@@ -7,6 +8,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto import ether
 from ryu.lib.packet import packet
+from ryu.lib import mac
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import arp
 from ryu.lib.packet import ipv4
@@ -15,19 +17,78 @@ from ryu.base import app_manager
 from ryu.lib import mac
 from ryu.lib.mac import haddr_to_bin
 from netaddr import *
-
-
+import Queue #Libreria de cola
+import ipaddr
+import ipaddress
 #h1 ifconfig h1-eth0 192.168.1.2
 #h1 route add default gw 192.168.1.1
 
+#if ipaddr.IPAddress('192.168.1.50') in ipaddr.IPv4Network('192.168.1.1'+'/'+ '255.255.255.0'):
+#	print "true"
+ip_mac_port = {1: ('255.255.255.0','00:00:00:00:01:01','192.168.1.1'),
+		       2: ('255.255.255.0','00:00:00:00:01:02','192.168.2.1'),
+		       3: ('255.255.255.0','00:00:00:00:01:03','192.168.3.1'),
+		       4: ('255.255.255.0','00:00:00:00:01:04','192.168.4.1')}
+		       
+e = ethernet.ethernet(dst=mac.BROADCAST,
+		      src=ip_mac_port[1][1],
+		      ethertype=ether.ETH_TYPE_ARP)
+a = arp.arp(opcode=arp.ARP_REQUEST,
+	    src_mac=ip_mac_port[1][1], src_ip='192.168.1.0',
+	    dst_mac=ip_mac_port[2][1], dst_ip='192.168.1.1')
+
+
+p = packet.Packet()
+p.add_protocol(e)
+p.add_protocol(a)
+
+print p.data
+print p.get_protocol
+		
+#IMPORTANTE HAY QUE DESARROLLAR LA LISTA DE PAQUETES EN ESPERA
+#Y EL MENSAJE DE ARP_REQUEST Y LUEGO UNA FUNCION PARA SACAR DE LA 
+#COLA PARA ENVIAR EL PAQUETE CON LA MAC CORRESPONDIENTE
 class L2Forwarding(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     ip_mac_port = {1: ('255.255.255.0','00:00:00:00:01:01','192.168.1.1'),
 		       2: ('255.255.255.0','00:00:00:00:01:02','192.168.2.1'),
 		       3: ('255.255.255.0','00:00:00:00:01:03','192.168.3.1'),
 		       4: ('255.255.255.0','00:00:00:00:01:04','192.168.4.1')}
-    
+    colaespera = [] #Atributo que guarda la cola
     #  Inserta una entrada a la tabla de flujo.
+    def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
+		#if (self.ip_mac_port[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
+		e = ethernet.ethernet(dst=mac.BROADCAST,
+				      src=self.ip_mac_port[in_port][1],
+				      ethertype=ether.ETH_TYPE_ARP)
+		a = arp.arp(opcode=arp.ARP_REQUEST,
+			    src_mac=self.ip_mac_port[port][1], src_ip=source_ip,
+			    dst_mac=mac_lib.DONTCARE_STR, dst_ip=dest_ip)
+		
+		
+		p = packet.Packet()
+		p.add_protocol(e)
+		p.add_protocol(a)
+		self.send_packet(datapath, port,p)
+    
+    
+    
+    def IPPACKET(self, datapath, port,mac_dst, pkt):
+		pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
+		#suponiendo que port es el puerto por el que va a salir
+						#poner la ip de destino
+		e = ethernet.ethernet(dst=mac_dst,
+				      src=self.ip_mac_port[port][1],
+				      ethertype=0x0800)
+		iper=ipv4.ipv4(dst=pkt_ipv4.dst,
+			    src=pkt_ipv4.src,
+			    proto=pkt_ipv4.proto)
+		
+		p = packet.Packet(pkt.data)
+		p.add_protocol(e)
+		p.add_protocol(iper)
+		self.send_packet(datapath, port, p)
+       
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
 		ofproto = datapath.ofproto
 		parser = datapath.ofproto_parser
@@ -67,7 +128,15 @@ class L2Forwarding(app_manager.RyuApp):
 			p.add_protocol(e)
 			p.add_protocol(a)
 			self.send_packet(datapath, in_port,p)
-    
+		#Procesar un ARPReply para hacer enrutamiento
+		elif arp_msg.opcode==arp.ARP_REPLY:
+			for paquetes in colaespera: #Buscamos en la lista para ver si hay paquetes en espera
+				pkt_ipv4=paquetes.get_protocol(ipv4.ipv4) 
+				if(pkt_ipv4):
+					if (pkt_ipv4.dst==arp_msg.src_ip): #Si la ip de destino del paquete coincide con quien envio esa ip
+						
+						self.IPPACKET(datapath,in_port,arp_msg.src_mac,paquetes )
+						
     def ICMPPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
 		if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
 			eer=ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
@@ -88,8 +157,9 @@ class L2Forwarding(app_manager.RyuApp):
 			p.add_protocol(icmper)
 	
 			self.send_packet(datapath, in_port, p)
-    
+			
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    
     def packet_in_handler(self, ev):
       
 		msg = ev.msg               # Objeto que representa la estuctura de datos PacketIn.
@@ -103,25 +173,25 @@ class L2Forwarding(app_manager.RyuApp):
 		in_port = msg.match['in_port'] # Puerto de entrada.
 		#print(in_port)
 
-		        # Ahora analizamos el paquete utilizando las clases de la libreria packet.
+		# Ahora analizamos el paquete utilizando las clases de la libreria packet.
 		pkt = packet.Packet(msg.data)
 		eth = pkt.get_protocol(ethernet.ethernet)
-
+		
+		
 		if eth.ethertype==0x0800: #PAQUETE IP
-		    comprobacion=0 
-		    pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
-		    entradas_router = self.ip_mac_port.keys()
-		    for entradas in entradas_router :
-				if self.ip_mac_port.get(entradas)[2]==pkt_ipv4.dst: #SI ES PARA EL ROUTER
-				    pkt_icmp=pkt.get_protocol(icmp.icmp)
-				    comprobacion=1
-				    if pkt_icmp:
-						self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
-			if comprobacion==0:
+			comprobacion=0 
+			pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
 			entradas_router = self.ip_mac_port.keys()
 			for entradas in entradas_router :
-			if IPv4Address(pkt_ipv4.dst) in IPv4Network(ip_mac_port(entradas)[2]+"/" ip_mac_port(entradas)[0])
-			#print("COMPROBACION==0")
+				if self.ip_mac_port.get(entradas)[2]==pkt_ipv4.dst: #SI ES PARA EL ROUTER
+					pkt_icmp=pkt.get_protocol(icmp.icmp)
+					comprobacion=1
+					if pkt_icmp:
+						self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+			if comprobacion==0:
+				for entradas in entradas_router :
+					if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(ip_mac_port(entradas)[2]+"/"+ ip_mac_port(entradas)[0]):
+						self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,ip_mac_port(entradas),datapath)
 		elif eth.ethertype==ether.ETH_TYPE_ARP:
 			pkt_arp=pkt.get_protocol(arp.arp)
 			self.ARPPacket(pkt_arp,in_port,datapath)
