@@ -190,8 +190,8 @@ class L2Forwarding(app_manager.RyuApp):
 						self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
 			if comprobacion==0:
 				for entradas in entradas_router :
-					if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(self.ip_mac_port(entradas)[2]+"/"+ self.ip_mac_port(entradas)[0]):
-						self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,self.ip_mac_port(entradas),datapath)
+					if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(self.ip_mac_port.get(entradas)[2]+"/"+ self.ip_mac_port.get(entradas)[0]):
+						self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,self.ip_mac_port.get(entradas),datapath)
 		elif eth.ethertype==ether.ETH_TYPE_ARP:
 			pkt_arp=pkt.get_protocol(arp.arp)
 			self.ARPPacket(pkt_arp,in_port,datapath)
