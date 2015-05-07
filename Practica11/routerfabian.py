@@ -22,29 +22,9 @@ import ipaddr
 import ipaddress
 #h1 ifconfig h1-eth0 192.168.1.2
 #h1 route add default gw 192.168.1.1
-
-#if ipaddr.IPAddress('192.168.1.50') in ipaddr.IPv4Network('192.168.1.1'+'/'+ '255.255.255.0'):
-#	print "true"
-ip_mac_port = {1: ('255.255.255.0','00:00:00:00:01:01','192.168.1.1'),
-		       2: ('255.255.255.0','00:00:00:00:01:02','192.168.2.1'),
-		       3: ('255.255.255.0','00:00:00:00:01:03','192.168.3.1'),
-		       4: ('255.255.255.0','00:00:00:00:01:04','192.168.4.1')}
-		       
-e = ethernet.ethernet(dst=mac.BROADCAST_STR,
-		      src=ip_mac_port[1][1],
-		      ethertype=ether.ETH_TYPE_ARP)
-a = arp.arp(opcode=arp.ARP_REQUEST,
-	    src_mac=ip_mac_port[1][1], src_ip='192.168.1.0',
-	    dst_mac=ip_mac_port[2][1], dst_ip='192.168.1.1')
-
-
-p = packet.Packet()
-p.add_protocol(e)
-p.add_protocol(a)
-
-print p.data
-print p.get_protocol
 		
+#print(ipaddr.IPv4Address('192.168.1.1').bins)
+
 #IMPORTANTE HAY QUE DESARROLLAR LA LISTA DE PAQUETES EN ESPERA
 #Y EL MENSAJE DE ARP_REQUEST Y LUEGO UNA FUNCION PARA SACAR DE LA 
 #COLA PARA ENVIAR EL PAQUETE CON LA MAC CORRESPONDIENTE
@@ -56,6 +36,61 @@ class L2Forwarding(app_manager.RyuApp):
 		       4: ('255.255.255.0','00:00:00:00:01:04','192.168.4.1')}
     colaespera = [] #Atributo que guarda la cola
     #  Inserta una entrada a la tabla de flujo.
+    
+    def compare(self,MASK_LIST):
+		cont=0
+		maximo=0
+		indice=0
+		indaux=0
+		for MASK in MASK_LIST:
+			#print(MASK[i])
+			indaux=indaux+1
+			for i in range(leng(MASK)):
+				if(MASK[i]=='1'):
+					cont=cont+1
+			if(cont>maximo):
+				maximo=cont
+				indice=indaux
+				
+		return indice
+    
+    #Quizas el fallo
+    def ReenvioPro(self, datapath, port, mac_src, mac_dst, pkt):
+	#	#ofproto = datapath.ofproto
+	#	parser = datapath.ofproto_parser
+	#	pkt.serialize()
+	#	data = pkt.data
+	#	#set_src = parser.OFPMatchField.make(ofp.OXM_OF_ETH_SRC,mac_src)
+	#	#set_dst = parser.OFPMatchField.make(ofp.OXM_OF_ETH_DST, mac_dst)
+	#	match = 
+	#	actions = [parser.OFPActionOutput(port=port),
+	#				parser.OFPActionSetField(eth_dst=mac_dst),
+	#				parser.OFPActionSetField(eth_src=mac_src)]
+	#	out = parser.OFPPacketOut(datapath=datapath,buffer_id=ofproto.OFP_NO_BUFFER,
+	#	in_port=ofproto.OFPP_CONTROLLER,
+	#	actions=actions,
+	#	data=data)
+	#	datapath.send_msg(out)
+		match = ofp_parser.OFPMatch(in_port=port)	
+		actions = [parser.OFPActionOutput(port=port),
+					parser.OFPActionSetField(eth_dst=mac_dst),
+					parser.OFPActionSetField(eth_src=mac_src)]
+		#self.add_flow(datapath,0,match,actions,None)
+	
+#	def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+#	ofproto = datapath.ofproto
+#	parser = datapath.ofproto_parser
+#	inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
+#	if buffer_id:
+#	mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+#	priority=priority, match=match,
+#	instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
+#	else:
+#	mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+#	match=match, instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
+#	print(mod)
+#	datapath.send_msg(mod)
+		
     def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
 		print port
 		#if (self.ip_mac_port[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
@@ -98,20 +133,11 @@ class L2Forwarding(app_manager.RyuApp):
 		p.add_protocol(iper)
 		p.add_protocol(icmper)
 		self.send_packet(datapath, port, p)
-       
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
-		ofproto = datapath.ofproto
-		parser = datapath.ofproto_parser
-		inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
-		if buffer_id:
-			mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
-				priority=priority, match=match,
-				instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
-		else:
-			mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-				match=match, instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
-		print(mod)
-		datapath.send_msg(mod)
+		
+		
+
+
+
 
     def send_packet(self, datapath, port, pkt):
 		ofproto = datapath.ofproto
@@ -125,7 +151,7 @@ class L2Forwarding(app_manager.RyuApp):
 				  actions=actions,
 				  data=data)
 		datapath.send_msg(out)
-		
+
     def ARPPacket(self,arp_msg,in_port,datapath):
 		if (self.ip_mac_port[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
 			e = ethernet.ethernet(dst=arp_msg.src_mac,
@@ -146,7 +172,8 @@ class L2Forwarding(app_manager.RyuApp):
 				if(pkt_ipv4):
 					if (pkt_ipv4.dst==arp_msg.src_ip): #Si la ip de destino del paquete coincide con quien envio esa ip
 						print "puta"
-						self.IPPACKET(datapath,in_port,arp_msg.src_mac,paquetes )
+						#self.ReenvioPro(self,datapath,in_port,self.ip_mac_port[in_port][1],arp_msg.src_mac,paquetes)
+						#self.IPPACKET(datapath,in_port,arp_msg.src_mac,paquetes )
 						self.colaespera.remove(paquetes)
 						
     def ICMPPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
