@@ -32,7 +32,7 @@ ovs-ofctl <-BUSCAR
 http://openvswitch.org/support/dist-docs/ovs-ofctl.8.txt
 
 Switch de capa 3
-outport(1),outport(2)...
+outport(1),outport(2)..
 
 
 Principio del enrutamiento
