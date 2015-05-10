@@ -20,9 +20,6 @@ from netaddr import *
 import Queue #Libreria de cola
 import ipaddr
 import ipaddress
-#h1 ifconfig h1-eth0 192.168.1.2
-#h1 route add default gw 192.168.1.1
-
 
         
 #IMPORTANTE HAY QUE DESARROLLAR LA LISTA DE PAQUETES EN ESPERA

@@ -11,9 +11,36 @@ from ryu.base import app_manager
 from ryu.lib import mac
 from ryu.lib.mac import haddr_to_bin
 
+# 802.1q VLAN
+
+#The following actions encapsulate / decapsulate packets into 802.1q VLAN headers.
+
+#class openfaucet.ofaction.ActionSetVlanVid
+
+#    An OFPAT_SET_VLAN_VID action, which sets the 802.1q VLAN ID of packets.
+
+#    vlan_vid
+#        The 802.1q VLAN ID to set in packets.
+
+#class openfaucet.ofaction.ActionSetVlanPcp
+
+#    An OFPAT_SET_VLAN_PCP action, which sets the 802.1q VLAN priority of packets.
+
+#    vlan_pcp
+#        The VLAN 802.1q priority to set in packets, as an 8-bit unsigned integer. Only the 3 least significant bits may be set to 1. All other bits must be set to 0.
+
+#class openfaucet.ofaction.ActionStripVlan
+#    An OFPAT_STRIP_VLAN action, which strips the 802.1q header from packets. This action has no attribute.
+
+
 class L2Forwarding(app_manager.RyuApp):
 	OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 	mac_to_port = dict()
+	tabla_vlan = { 1: '10',
+				   2: '10',
+				   3: '20',
+				   4: '20'
+	}
 	
 	def __init__(self, *args, **kwargs):
 		super(L2Forwarding, self).__init__(*args, **kwargs)
@@ -44,8 +71,13 @@ class L2Forwarding(app_manager.RyuApp):
         
 		if src not in self.mac_to_port.keys():
 			self.mac_to_port[src]=in_port
-		
-		if haddr_to_bin(dst) == mac.BROADCAST or mac.is_multicast(haddr_to_bin(dst)):
+			
+		if dst not in self.mac_to_port.keys():
+			actions = [ofp_parser.OFPPacketOut(ofproto.OFPP_FLOOD)]
+			req = ofp_parser.OFPPacketOut(datapath=datapath, buffer_id=None, in_port=in_port, actions=actions, data=msg.data)
+			datapath.send_msg(req)
+			
+		elif haddr_to_bin(dst) == mac.BROADCAST or mac.is_multicast(haddr_to_bin(dst)):
 			# Creamos el conjunto de acciones: FLOOD
 			actions = [ofp_parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
 	
@@ -62,14 +94,26 @@ class L2Forwarding(app_manager.RyuApp):
 	
 			# Enviamos el mensaje.
 			datapath.send_msg(mod)
-	
-		elif dst not in self.mac_to_port.keys():
-			actions = [ofp_parser.OFPPacketOut(ofproto.OFPP_FLOOD)]
-			req = ofp_parser.OFPPacketOut(datapath=datapath, buffer_id=None, in_port=in_port, actions=actions, data=msg.data)
-			datapath.send_msg(req)
-	
-		else: 
+			
+		elif self.tabla_vlan[self.mac_to_port[src][0]]==self.tabla_vlan[self.mac_to_port[dst][0]]:
+			
 			actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
+			# Ahora creamos el match  
+			# fijando los valores de los campos 
+			# que queremos casar.
+			match = ofp_parser.OFPMatch(eth_dst=dst)
+			
+			# Creamos el conjunto de instrucciones.
+			inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+			
+			# Creamos el mensaje OpenFlow 
+			mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
+			
+			# Enviamos el mensaje.
+			datapath.send_msg(mod)
+
+		else: #En caso contrario, tiramos el paquete
+			actions = []
 	
 			# Ahora creamos el match  
 			# fijando los valores de los campos 

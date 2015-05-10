@@ -1,4 +1,4 @@
-d#!/usr/bin/python
+#!/usr/bin/python
 #coding=utf-8
 
 from ryu.base import app_manager
