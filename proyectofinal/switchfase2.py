@@ -34,14 +34,20 @@ from ryu.lib.mac import haddr_to_bin
 
 
 class L2Forwarding(app_manager.RyuApp):
-	OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-	mac_to_port = dict()
-	tabla_vlan = { 1: '10',
+    OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
+    mac_to_port = dict()
+    tabla_vlan = { 1: '10',
 				   2: '10',
 				   3: '20',
 				   4: '20'}
-	
+				   
+    ip_mac_port = {'10': ('255.255.255.0','192.168.1.1'), #'10': ('00:00:00:00:01:01','192.168.1.1'),
+                   '20': ('255.255.255.0','192.168.2.1'), #'20': ('00:00:00:00:01:02','192.168.2.1'),
+        		   '30': ('255.255.255.0','192.168.3.1'), #'30': ('00:00:00:00:01:03','192.168.3.1'),
+            	   '40': ('255.255.255.0','192.168.4.1')} #'40': ('00:00:00:00:01:04','192.168.4.1')}
 
+	
+	
 	def __init__(self, *args, **kwargs):
 		super(L2Forwarding, self).__init__(*args, **kwargs)
 
@@ -148,4 +154,18 @@ class L2Forwarding(app_manager.RyuApp):
 			# Enviamos el mensaje.
 			datapath.send_msg(mod)
 			
-		
+			#Dos tablas de flujo: 
+			#
+			#Para añadir una tabla req = ofp_parser.OFPTableMod(datapath, 1, 3
+			#Para añadir entradas a una tabla FlowMod tiene un valor table_id que dice a que tabla se añadira
+			#Para redirigir a una tabla, hay una instruccion especifica goto = parser.OFPInstructionGotoTable(1)
+			#
+			#Campos a añadir al paquete para el enruamitneto
+			#vlan_vid 
+			#vlanpcp
+			#eth_type ??
+			#La puta biblia
+			#http://ryu.readthedocs.org/en/latest/ofproto_v1_3_ref.html
+			#Aqui habla de virtual routing
+			#https://www.opennetworking.org/images/stories/downloads/sdn-resources/technical-reports/TR_Multiple_Flow_Tables_and_TTPs.pdf
+			
