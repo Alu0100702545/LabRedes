@@ -7,8 +7,8 @@ Llega un paquete
 	+¿Se trata de un arp? [OK]
 		+¿Es para mi? [OK]
 			+RESPONDER(Actualmente se trata el paquete)
-			-Reenviar dentro de la vlan 
-		-Reenviar dentro de VLAN
+			-Reenviar ARP dentro de la vlan [OK] 
+		-Reenviar dentro de VLAN [OK]
 	-La mac de destino es alguna interfaz?
 		+¿Se trata de un paquete IP?
 			+¿Es para la interfaz?
@@ -20,10 +20,10 @@ Llega un paquete
 				+Responder
 				-Lo tiro
 		-¿No tengo la mac de destino en la lista?
-			+Inundo la vlan
-			-¿Estan en la misma vlan?
-				+Añado la entrada de reenvio en la tabla 0
-				-Tiro el paquete (Estaría intentando ir de una vlan a otra directamente)
+			+Inundo la vlan [OK]
+			-¿Estan en la misma vlan? [OK]
+				+Añado la entrada de reenvio en la tabla 0 [OK]
+				-Tiro el paquete (Estaría intentando ir de una vlan a otra directamente) [OK]
 
 
 

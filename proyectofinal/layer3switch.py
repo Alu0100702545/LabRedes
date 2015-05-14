@@ -183,7 +183,7 @@ class L2Forwarding(app_manager.RyuApp):
         mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
         datapath.send_msg(mod)      
 #--------------------------------------------------------------------------------------
-    def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
+    def buildArpRequestPacket()(self,dest_ip,source_ip,port,datapath):
         #Funcion para enviar un paquete ARP
         e = ethernet.ethernet(dst=mac.BROADCAST_STR ,
                       src=self.interfaces_virtuales.get(self.tabla_vlan[port])[0],
@@ -194,9 +194,9 @@ class L2Forwarding(app_manager.RyuApp):
         p.add_protocol(e)
         p.add_protocol(a)
         
-        self.send_packet(datapath, port,p)
+        self.sendPacket(datapath, port,p)
 
-    def send_packet(self, datapath, port, pkt):
+    def sendPacket(self, datapath, port, pkt):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         pkt.serialize()
@@ -209,12 +209,12 @@ class L2Forwarding(app_manager.RyuApp):
                   data=data)
         datapath.send_msg(out)
 
-    def ARPPacket(self,arp_msg,in_port,datapath):
+    def handleArpPacket(self,arp_msg,in_port,datapath):
         #Función que procesa los paquetes ARP que llegan a las interfaces virtuales
-
         if arp_msg.opcode==arp.ARP_REQUEST:
             #Si se trata de un ARP_Request para el router
             #Construir la respuesta y devolverlo por el puerto de entrada
+            print("SOMEONE NEEDS KNOW ONE OF THE SVI MAC'S I WILL GIVE HIM")
             e = ethernet.ethernet(dst=arp_msg.src_mac,
                           src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0],
                           ethertype=ether.ETH_TYPE_ARP)
@@ -224,7 +224,7 @@ class L2Forwarding(app_manager.RyuApp):
             p = packet.Packet()
             p.add_protocol(e)
             p.add_protocol(a)
-            self.send_packet(datapath, in_port,p)
+            self.sendPacket(datapath, in_port,p)
         
         elif arp_msg.opcode==arp.ARP_REPLY:
             #Si se trata de una respuesta de ARP
@@ -251,7 +251,7 @@ class L2Forwarding(app_manager.RyuApp):
                                   data=data)
                         datapath.send_msg(out)
                         
-    def ICMPPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
+    def buildIcmpAnswer(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
         #Función para procesar los paquetes ICMP que vienen a la interfaz
         if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
             #Si es un echo request, construimos un echo reply y lo devolvemos.
@@ -272,7 +272,7 @@ class L2Forwarding(app_manager.RyuApp):
             p.add_protocol(iper)
             p.add_protocol(icmper)
     
-            self.send_packet(datapath, in_port, p)
+            self.sendPacket(datapath, in_port, p)
               
     def paquete_para_enrutar(self, ev):
       
@@ -303,7 +303,7 @@ class L2Forwarding(app_manager.RyuApp):
             self.colaespera.append(pkt)
             for puertos in self.tabla_vlan.keys() :
                 if self.tabla_vlan.get(puertos)==vlainds:
-                    self.ARPREQUESTPacket(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
+                    self.buildArpRequestPacket()(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
         else: #Si tenemos la mac en cache
             print("I HAVE ALL THE PARAMETERS FOR FORWARDING IT")
 
@@ -351,7 +351,7 @@ class L2Forwarding(app_manager.RyuApp):
                 print("ARP CAME BY BROADCAST")
                 if self.paraipinterfaz(pkt_arp.dst_ip)!=None:
                     print("IT'S FOR A SVI, WE SHOULD ANSWER THAT")
-                    self.ARPPacket(pkt_arp,in_port,datapath)
+                    self.handleArpPacket()(pkt_arp,in_port,datapath)
                 else:
                     print("NORMAL BROADCAST")
                     #We just have to fordward the packet thourgh the ports
@@ -378,7 +378,7 @@ class L2Forwarding(app_manager.RyuApp):
                         pkt_icmp=pkt.get_protocol(icmp.icmp)
                         if (pkt_icmp): #Si es ICMP
                             print("ESE IP ES PARA MI, RESPONDERE")
-                            self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+                            self.buildIcmpAnswer(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
                         else:
                             self.drop
                     else:
@@ -394,7 +394,7 @@ class L2Forwarding(app_manager.RyuApp):
                 elif eth.ethertype==ether.ETH_TYPE_ARP:
                     print("AN ARP FOR ME, I WILL MANAGE THAT")
                     pkt_arp=pkt.get_protocol(arp.arp)
-                    self.ARPPacket(pkt_arp,in_port,datapath)
+                    self.handleArpPacket()(pkt_arp,in_port,datapath)
 
             #If the packet isn't going to the interface
             #it might go to the same vlan, so we have to forward it      
