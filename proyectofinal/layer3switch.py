@@ -20,15 +20,24 @@ import ipaddr
 import ipaddress
 
 class L2Forwarding(app_manager.RyuApp):
+
+#El flujo del programa empieza en la linea 308
+#----------------------------------------------
+#Atributos:
+#----------------------------------------------
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    mac_to_port = dict()
-    tabla_vlan = dict()
-    port_ip_mac =dict()
-    interfaces_virtuales = dict()
+    mac_to_port = dict()          #Diccionario para switch basico
+    tabla_vlan = dict()           #Diccionario para asociar vlan y puertos 
+    port_ip_mac =dict()           #Diccionario para reenviar los paquetes en enrutamiento
+    interfaces_virtuales = dict() #Diccionario para definir las interfaces virtuales de la vlan
                     
-    tabla_enrutamiento = {}
-    colaespera = [] #Atributo que guarda la cola
+    tabla_enrutamiento = {}       #Tabla de enrutamiento
+    colaespera = []               #Atributo que guarda la cola
     
+
+#-------------------------------------------------------
+#Funciones de lectura desde los ficheros auxiliares:
+
     def lectura_vlan(self):
         infile = open('vlan.vf', 'r')
         
@@ -53,6 +62,8 @@ class L2Forwarding(app_manager.RyuApp):
         infile.close()
         print self.tabla_vlan
     
+
+
     def lectura_interfaces(self):
         infile = open('interfaces.if', 'r')
         
@@ -91,14 +102,18 @@ class L2Forwarding(app_manager.RyuApp):
                             
         infile.close()
         print self.interfaces_virtuales
-    
+#-------------------------------------------------------
+
     def __init__(self, *args, **kwargs):
         super(L2Forwarding, self).__init__(*args, **kwargs)
         self.lectura_vlan()
         self.lectura_interfaces()
         
-        
+#------------------------------------------------------------- 
+#Funciones de ayuda para operaciones repetitivas:
+
     def compare(self,MASK_LIST):
+        #Funcion que te dice cual es la mayor mascara aplicable
         cont=0
         maximo=0
         port=0
@@ -113,6 +128,7 @@ class L2Forwarding(app_manager.RyuApp):
         return port
         
     def paraipinterfaz(self,ip):
+        #Funcion para saber si un paquete ip va dirigido a las interfaces del router
         presente=False
         for INTERFACE in self.interfaces_virtuales.keys():
             if self.interfaces_virtuales.get(INTERFACE)[2]==ip:
@@ -120,12 +136,16 @@ class L2Forwarding(app_manager.RyuApp):
         return presente
         
     def paramacinterfaz(self,mac):
+        #Función para saber si la mac de un paquete va dirigida a la interfaz
         presente=False
         for INTERFACE in self.interfaces_virtuales.keys():
             if self.interfaces_virtuales.get(INTERFACE)[0]==mac:
                 presente=True
         return presente
-    
+
+
+#-------------------------------------------------------------------------------------
+#Funcion para añadir un flujo a la tabla de datos
     def add_flow(self, datapath, priority, match, actions,table_id=0 ,buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -136,20 +156,19 @@ class L2Forwarding(app_manager.RyuApp):
                 instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-            match=match,table_id=table_id, instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
+                    match=match,table_id=table_id, instructions=inst, 
+                    idle_timeout=30,command=ofproto.OFPFC_ADD)
         print(mod)
         datapath.send_msg(mod)
 
+#--------------------------------------------------------------------------------------
     def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
-        print port
-        #if (self.interfaces_virtuales[in_port][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
+        #Funcion para enviar un paquete ARP
         e = ethernet.ethernet(dst=mac.BROADCAST_STR ,
                       src=self.interfaces_virtuales.get(self.tabla_vlan[port])[0],
                       ethertype=ether.ETH_TYPE_ARP)
         a = arp.arp(opcode=arp.ARP_REQUEST,
                 src_mac=self.interfaces_virtuales.get(self.tabla_vlan[port])[0], src_ip=source_ip, dst_ip=dest_ip)
-        
-        
         p = packet.Packet()
         p.add_protocol(e)
         p.add_protocol(a)
@@ -170,9 +189,7 @@ class L2Forwarding(app_manager.RyuApp):
         datapath.send_msg(out)
 
     def ARPPacket(self,arp_msg,in_port,datapath):
-        if arp_msg.opcode==arp.ARP_REQUEST:
-        #if (self.interfaces_virtuales[self.tabla_vlan[in_port]][2]==arp_msg.dst_ip and arp_msg.opcode==arp.ARP_REQUEST):
-            #Si va pa la interfaz coño    
+        if arp_msg.opcode==arp.ARP_REQUEST:  
             e = ethernet.ethernet(dst=arp_msg.src_mac,
                           src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0],
                           ethertype=ether.ETH_TYPE_ARP)
@@ -190,8 +207,6 @@ class L2Forwarding(app_manager.RyuApp):
                 if(pkt_ipv4):
                     if (pkt_ipv4.dst==arp_msg.src_ip): #Si la ip de destino del paquete coincide con quien envio esa ip
                         self.tabla_enrutamiento[pkt_ipv4.dst]=arp_msg.src_mac
-                        #self.ReenvioPro(self,datapath,pkt_ipv4.dst,in_port,self.interfaces_virtuales[in_port][1],arp_msg.src_mac,paquetes)
-                        #self.IPPACKET(datapath,in_port,arp_msg.src_mac,paquetes )
                         self.colaespera.remove(paquetes)
                         ofproto = datapath.ofproto
                         ofp_parser = datapath.ofproto_parser
@@ -265,7 +280,7 @@ class L2Forwarding(app_manager.RyuApp):
             if(pkt_ipv4.src not in self.tabla_enrutamiento): 
                 self.tabla_enrutamiento[pkt_ipv4.src]=eth.src
             if(pkt_ipv4.dst not in self.tabla_enrutamiento):
-                print("I don't know that mac :c")
+                print("No s")
                 self.colaespera.append(pkt)
                 for puertos in self.tabla_vlan.keys() :
                     if self.tabla_vlan.get(puertos)==entradas:
