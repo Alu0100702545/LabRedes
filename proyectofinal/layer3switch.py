@@ -145,6 +145,16 @@ class L2Forwarding(app_manager.RyuApp):
                 presente=adecuada
         return adecuada
 
+    def portSameVlan(self,in_port):
+        #This function returns a list of ports that are in the same vlan 
+        #than in_port
+        lista=[]
+        for j in self.tabla_vlan.keys():
+            if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port:
+                lista.append[j]
+        return j
+
+
 #-------------------------------------------------------------------------------------
 #Funcion para añadir un flujo a la tabla de datos
     def add_flow(self, datapath, priority, match, actions,table_id=0 ,buffer_id=None):
@@ -351,19 +361,16 @@ class L2Forwarding(app_manager.RyuApp):
                     print("ES PARA ALGUNA SVI, DEBEMOS RESPONDER")
                     self.ARPPacket(pkt_arp,in_port,datapath)
                 else: 
-                    print("NO ES PARA MI, LO REENVIO DENTRO LA VLAN")
+                    print("IT'S NOT FOR ME I WILL FORWARD IT THROUGH THE VLAN")
                     actions = []
+                    ports=self.portSameVlan(in_port)
                     print("-------------------------------------------------------")
-                    for j in self.tabla_vlan.keys():
-                        print("Puerto? ", j)
-                        if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port :
-                            actions.append(ofp_parser.OFPActionOutput(j))
-                            print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos ", j)
-                    # Ahora creamos el match fijando los valores de los campos que queremos casar.
+                    for i in ports:
+                        actions.append(ofp_parser.OFPActionOutput(i))   
+                        #print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos ", j)
+                    # Now we set the match, the instructions of applying the actions, and we send the msg
                     match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
-                    # Creamos el conjunto de instrucciones.
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                    # Creamos el mensaje OpenFlow 
                     mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
                     # Enviamos el mensaje.
                     datapath.send_msg(mod)
