@@ -128,21 +128,22 @@ class L2Forwarding(app_manager.RyuApp):
         return port
         
     def paraipinterfaz(self,ip):
-        #Funcion para saber si un paquete ip va dirigido a las interfaces del router
-        presente=False
-        for INTERFACE in self.interfaces_virtuales.keys():
-            if self.interfaces_virtuales.get(INTERFACE)[2]==ip:
-                presente=True
-        return presente
+        #Funcion para saber si un paquete ip va dirigido a las interfaces virtuales
+        #y de que interfaz se trata
+        adecuada=None
+        for interfaz in self.interfaces_virtuales.keys():
+            if self.interfaces_virtuales.get(interfaz)[2]==ip:
+                adecuada=interfaz
+        return adecuada
         
     def paramacinterfaz(self,mac):
         #Función para saber si la mac de un paquete va dirigida a la interfaz
-        presente=False
-        for INTERFACE in self.interfaces_virtuales.keys():
+        #y de que interfaz se trata
+        adecuada=None
+        for interfaz in self.interfaces_virtuales.keys():
             if self.interfaces_virtuales.get(INTERFACE)[0]==mac:
-                presente=True
-        return presente
-
+                presente=adecuada
+        return adecuada
 
 #-------------------------------------------------------------------------------------
 #Funcion para añadir un flujo a la tabla de datos
@@ -320,7 +321,7 @@ class L2Forwarding(app_manager.RyuApp):
                                    # de negociacion entre controlador y switch
 
         ofp_parser=datapath.ofproto_parser # Parser con la version OF
-                       # correspondiente
+                                           # correspondiente
         print("===========================================================================")
         print("PAQUETE ENTRANTE")
         in_port = msg.match['in_port'] # Puerto de entrada.
@@ -346,7 +347,7 @@ class L2Forwarding(app_manager.RyuApp):
                 pkt_arp=pkt.get_protocol(arp.arp)
                 print("ARP POR BROADCAST!!")
                 #for INTERFACE in self.interfaces_virtuales.keys():
-                if self.paraipinterfaz(pkt_arp.dst_ip):
+                if self.paraipinterfaz(pkt_arp.dst_ip)!=None:
                     print("ES PARA ALGUNA SVI, DEBEMOS RESPONDER")
                     self.ARPPacket(pkt_arp,in_port,datapath)
                 else: 
@@ -368,78 +369,70 @@ class L2Forwarding(app_manager.RyuApp):
                     datapath.send_msg(mod)
             else: 
                 print("BROADCAST NORMAL")
+                #Como hay que retransmitir solo a las vlans, creamos un diccionario vacio
                 actions = []
                 print("-------------------------------------------------------")
                 for j in self.tabla_vlan.keys():
-                    print("Puerto? ", j)
                     if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port :
                         actions.append(ofp_parser.OFPActionOutput(j))
-                        print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos ", j)
+                        print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos a enviar: ", j)
                 print("-------------------------------------------------------")
-                # Ahora creamos el match  
-                # fijando los valores de los campos 
-                # que queremos casar.
+                # Ahora creamos el match
+                #Todos los paquetes por broadcast que vengan de ahí se reenviaran a esos puertos
                 match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
-                # Creamos el conjunto de instrucciones.
+                # Aplicamos las instrucciones
                 inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                 # Creamos el mensaje OpenFlow 
                 mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
                 # Enviamos el mensaje.
                 datapath.send_msg(mod)
                 
-        elif self.paramacinterfaz(dst):
-              #eth = pkt.get_protocol(ethernet.ethernet)
+        elif self.paramacinterfaz(dst)!=None:
+            #Si la mac de destino es la interfaz, tendremos que hacer otras comprobaciones
             pkt_arp=pkt.get_protocol(arp.arp)
-            #PROCESAR ARPREPLY PARA LAS INTERFACES VIRTUALES <---------
-            print("Para la interfaz virtual")
-            for INTERFACE in self.interfaces_virtuales.keys():
-               if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
-                    if eth.ethertype==0x0800: #Si es IP
-                        pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
-                        if self.paraipinterfaz(pkt_ipv4.dst):
-                            pkt_icmp=pkt.get_protocol(icmp.icmp)
-                            if (pkt_icmp): #Si es ICMP
-                                print("ESE IP ES PARA MI, RESPONDERE")
-                                self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
-                        else:
-                            print("ESTO PAQUETE IP NO ES PA MI, LO ENRUTARE")
-                            match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0],ipv4_dst=pkt_ipv4.dst)
-                            goto = ofp_parser.OFPInstructionGotoTable(1)
-                            mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=msg.buffer_id)
-                            #mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0, match=match,table_id=0,instructions=[goto])
-                            datapath.send_msg(mod)
-                            self.paquete_para_enrutar(ev)
+            print("Para alguna interfaz virtual")
+            INTERFACE=self.macCualInterfaz(dst)
+            #for INTERFACE in self.interfaces_virtuales.keys():
+            if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
+                if eth.ethertype==0x0800: #Si es IP
+                    pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
+                    if self.paraipinterfaz(pkt_ipv4.dst):
+                        pkt_icmp=pkt.get_protocol(icmp.icmp)
+                        if (pkt_icmp): #Si es ICMP
+                            print("ESE IP ES PARA MI, RESPONDERE")
+                            self.ICMPPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+                    else:
+                        print("ESTO PAQUETE IP NO ES PA MI, LO ENRUTARE")
+                        match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0],ipv4_dst=pkt_ipv4.dst)
+                        goto = ofp_parser.OFPInstructionGotoTable(1)
+                        mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=msg.buffer_id)
+                        #mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0, match=match,table_id=0,instructions=[goto])
+                        datapath.send_msg(mod)
+                        self.paquete_para_enrutar(ev)
 
-                    elif eth.ethertype==ether.ETH_TYPE_ARP:
-                        print("UN ARP CON MI NOMBRE :O")
-                        pkt_arp=pkt.get_protocol(arp.arp)
-                        self.ARPPacket(pkt_arp,in_port,datapath)
-               
+                elif eth.ethertype==ether.ETH_TYPE_ARP:
+                    print("UN ARP CON MI NOMBRE :O")
+                    pkt_arp=pkt.get_protocol(arp.arp)
+                    self.ARPPacket(pkt_arp,in_port,datapath)
+
+        #Si no va para la interfaz ni tengo la mac de destino
+        #es probable que vaya para otro misma vlan
+        #por lo que tengo que enrutarlo dentro la propia vlan      
         elif dst not in self.mac_to_port.keys() :
-            #actions = [ofp_parser.OFPPacketOut(ofproto.OFPP_FLOOD)]
-               # Creamos el conjunto de acciones: FLOOD PENE
-            pkt_arp=pkt.get_protocol(arp.arp)
-            if(pkt_arp):
-                for INTERFACE in self.interfaces_virtuales.keys():
-                    if eth.ethertype==ether.ETH_TYPE_ARP and self.interfaces_virtuales.get(INTERFACE)[2]==pkt_arp.dst_ip:
-                        print("AL ENRUTAMOVIL! PIRIRIRIRIRIRI")
-                        self.ARPPacket(pkt_arp,in_port,datapath)
-            else: 
-                actions = []
-                print("NO CONOZCO LA MAC ", dst)
-                
-                for i in self.tabla_vlan.keys():
-                    if self.tabla_vlan.get(i)==self.tabla_vlan.get(in_port) and i !=in_port :
-                        actions.append(ofp_parser.OFPActionOutput(i))
-                        print i
-                
-                print("QUIEN DE LA VLAN ", self.tabla_vlan.get(in_port), " TIENE LA MAC ", dst,"?")
-                #Aqui esta el fallo en buffer id os dejo el mensaje que sale
-                
-                req = ofp_parser.OFPPacketOut(datapath=datapath, buffer_id=ofproto.OFP_NO_BUFFER, in_port=in_port, actions=actions, data=msg.data)
-                print("MANDAMOS REQ")
-                datapath.send_msg(req)
-                print("MANDADO!")
+            actions = []
+            print("NO CONOZCO LA MAC ", dst)
+            
+            for i in self.tabla_vlan.keys():
+                if self.tabla_vlan.get(i)==self.tabla_vlan.get(in_port) and i !=in_port :
+                    actions.append(ofp_parser.OFPActionOutput(i))
+                    print ("Lo enviaré al puerto: ",i)
+            
+            print("QUIEN DE LA VLAN ", self.tabla_vlan.get(in_port), " TIENE LA MAC ", dst,"?")
+            
+            req = ofp_parser.OFPPacketOut(datapath=datapath, buffer_id=ofproto.OFP_NO_BUFFER, in_port=in_port, actions=actions, data=msg.data)
+            print("MANDAMOS REQ")
+            datapath.send_msg(req)
+            print("MANDADO!")
             
         elif self.tabla_vlan.get(self.mac_to_port.get(src)) == self.tabla_vlan.get(self.mac_to_port.get(dst)) :
             actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
