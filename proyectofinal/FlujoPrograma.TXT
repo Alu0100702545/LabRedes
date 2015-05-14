@@ -1,11 +1,11 @@
 Flujo del switch capa 3>
 
 Llega un paquete
-¿Tengo su mac de origen?
-	Anoto puerto mac
-¿La mac de destino es multicast o broadcast? 
-	+¿Se trata de un arp?
-		+¿Es para mi? 
+¿Tengo su mac de origen? [OK]
+	Anoto puerto y mac [OK]
+¿La mac de destino es multicast o broadcast? [OK]
+	+¿Se trata de un arp? [OK]
+		+¿Es para mi? [OK]
 			+RESPONDER(Actualmente se trata el paquete)
 			-Reenviar dentro de la vlan 
 		-Reenviar dentro de VLAN

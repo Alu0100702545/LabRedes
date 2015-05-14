@@ -145,14 +145,15 @@ class L2Forwarding(app_manager.RyuApp):
                 presente=adecuada
         return adecuada
 
-    def portSameVlan(self,in_port):
+    def forwardPortsSameVlan(self,ofp_parser,in_port):
         #This function returns a list of ports that are in the same vlan 
         #than in_port
         lista=[]
         for j in self.tabla_vlan.keys():
             if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port:
-                lista.append[j]
-        return j
+                lista.append[ofp_parser.OFPActionOutput(j)]
+                print ("FORWARDING TO: ", j)
+        return lista
 
 
 #-------------------------------------------------------------------------------------
@@ -172,6 +173,15 @@ class L2Forwarding(app_manager.RyuApp):
         print(mod)
         datapath.send_msg(mod)
 
+    def addForwardVlanFlow(self,datapath,ofproto,ofp_parser,dst,src,port):
+        print("IT'S NOT FOR ME I WILL FORWARD IT THROUGH THE VLAN") 
+        print("-------------------------------------------------------")
+        actions = self.forwardPortSameVlan(in_port)  
+        print("-------------------------------------------------------")
+        match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
+        inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
+        datapath.send_msg(mod)      
 #--------------------------------------------------------------------------------------
     def ARPREQUESTPacket(self,dest_ip,source_ip,port,datapath):
         #Funcion para enviar un paquete ARP
@@ -336,63 +346,36 @@ class L2Forwarding(app_manager.RyuApp):
         print("PAQUETE ENTRANTE")
         in_port = msg.match['in_port'] # Puerto de entrada.
         print("PUERTO: ", in_port)
-        # Ahora analizamos el paquete utilizando las clases de la libreria packet.
+        # We extract the packet from the data
         pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocol(ethernet.ethernet)
+        # And we extract the ethernet protocol
+        eth = pkt.get_protocol(ethernet.ethernet) 
 
-        # Extraemos la MAC de destino
-        dst = eth.dst  
-        print("MAC DE DESTINO: ", dst)
-        #Extramos la MAC de origen
-        src = eth.src
-        print("MAC DE ORIGEN: ", src)
-        
+        src = eth.src #Source MAC
+        dst = eth.dst #Destiny MAC
+        print("SOURCE MAC: ", src)
+        print("DESTINY MAC: ", dst)
         if src not in self.mac_to_port.keys():
-            print("NO TENGO LA MAC DE ORIGEN EN MI TABLA, LA ANOTARÉ")
+            print("I DON'T KNOW THAT MAC, SAVING MAC-PORT")
             self.mac_to_port[src]=in_port
 
         if haddr_to_bin(dst) == mac.BROADCAST or mac.is_multicast(haddr_to_bin(dst)):
-            # Creamos el conjunto de acciones:
             if eth.ethertype==ether.ETH_TYPE_ARP:
                 pkt_arp=pkt.get_protocol(arp.arp)
-                print("ARP POR BROADCAST!!")
-                #for INTERFACE in self.interfaces_virtuales.keys():
+                print("ARP CAME BY BROADCAST")
                 if self.paraipinterfaz(pkt_arp.dst_ip)!=None:
-                    print("ES PARA ALGUNA SVI, DEBEMOS RESPONDER")
+                    print("IT'S FOR A SVI, WE SHOULD ANSWER THAT")
                     self.ARPPacket(pkt_arp,in_port,datapath)
-                else: 
-                    print("IT'S NOT FOR ME I WILL FORWARD IT THROUGH THE VLAN")
-                    actions = []
-                    ports=self.portSameVlan(in_port)
-                    print("-------------------------------------------------------")
-                    for i in ports:
-                        actions.append(ofp_parser.OFPActionOutput(i))   
-                        #print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos ", j)
-                    # Now we set the match, the instructions of applying the actions, and we send the msg
-                    match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
-                    inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                    mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
-                    # Enviamos el mensaje.
-                    datapath.send_msg(mod)
+                else:
+                    print("NORMAL BROADCAST")
+                    #We just have to fordward the packet thourgh the ports
+                    #in the same vlan as the in_port
+                    self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port)
             else: 
-                print("BROADCAST NORMAL")
-                #Como hay que retransmitir solo a las vlans, creamos un diccionario vacio
-                actions = []
-                print("-------------------------------------------------------")
-                for j in self.tabla_vlan.keys():
-                    if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port :
-                        actions.append(ofp_parser.OFPActionOutput(j))
-                        print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos a enviar: ", j)
-                print("-------------------------------------------------------")
-                # Ahora creamos el match
-                #Todos los paquetes por broadcast que vengan de ahí se reenviaran a esos puertos
-                match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
-                # Aplicamos las instrucciones
-                inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                # Creamos el mensaje OpenFlow 
-                mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
-                # Enviamos el mensaje.
-                datapath.send_msg(mod)
+                print("NORMAL BROADCAST")
+                #We just have to fordward the packet thourgh the ports
+                #in the same vlan as the in_port 
+                self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port)
                 
         elif self.paramacinterfaz(dst)!=None:
             #Si la mac de destino es la interfaz, tendremos que hacer otras comprobaciones
