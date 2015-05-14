@@ -1,0 +1,23 @@
+Flujo del switch capa 3>
+
+Llega un paquete
+Tengo su mac de origen?
+	Anoto puerto mac
+Es multicast o broadcast? 
+	+Se trata de un arp?
+		+Es para mi? 
+			+RESPONDER(Actualmente se trata el paquete)
+			-REENVIAR DENTRO DE VLAN 
+		-Reenviar dentro de VLAN
+	-La mac de destino es alguna interfaz?
+		+¿Se trata de un paquete IP?
+			+¿Es para la interfaz?
+				+¿Es icmp?
+					+Respondo
+					-Lo tiro
+				-Enrutarlo
+		+¿Se trata de un paquete ARP?
+			+Responder
+		-Lo tiro
+
+
