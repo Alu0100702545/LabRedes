@@ -9,16 +9,17 @@ Llega un paquete
 			+RESPONDER(Actualmente se trata el paquete)
 			-Reenviar ARP dentro de la vlan [OK] 
 		-Reenviar dentro de VLAN [OK]
-	-La mac de destino es alguna interfaz?
-		+¿Se trata de un paquete IP?
-			+¿Es para la interfaz?
-				+¿Es icmp?
-					+Respondo
-					-Lo tiro
-				-Enrutarlo
-			-¿Se trata de un paquete ARP?
-				+Responder
-				-Lo tiro
+	-La mac de destino es alguna interfaz? [OK]
+		+¿Se trata de un paquete IP? [OK]
+			+¿Es para la interfaz? [OK]
+				+¿Es icmp? [OK]
+					+Respondo [OK]
+					-Lo tiro 
+					[Dudas como puedo tirar esto?]
+				-Enrutarlo [OK]
+			-¿Se trata de un paquete ARP? [OK]
+				+Responder [OK]
+				-Lo tiro [OK]
 		-¿No tengo la mac de destino en la lista?
 			+Inundo la vlan [OK]
 			-¿Estan en la misma vlan? [OK]

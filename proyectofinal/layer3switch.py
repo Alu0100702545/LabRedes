@@ -251,7 +251,7 @@ class L2Forwarding(app_manager.RyuApp):
                                   data=data)
                         datapath.send_msg(out)
                         
-    def buildIcmpAnswer(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
+    def handleIcmpPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
         #Función para procesar los paquetes ICMP que vienen a la interfaz
         if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
             #Si es un echo request, construimos un echo reply y lo devolvemos.
@@ -378,7 +378,7 @@ class L2Forwarding(app_manager.RyuApp):
                         pkt_icmp=pkt.get_protocol(icmp.icmp)
                         if (pkt_icmp): #Si es ICMP
                             print("ESE IP ES PARA MI, RESPONDERE")
-                            self.buildIcmpAnswer(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+                            self.handleIcmpPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
                         else:
                             self.drop
                     else:
