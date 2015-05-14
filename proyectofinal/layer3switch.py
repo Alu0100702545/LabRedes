@@ -189,7 +189,11 @@ class L2Forwarding(app_manager.RyuApp):
         datapath.send_msg(out)
 
     def ARPPacket(self,arp_msg,in_port,datapath):
-        if arp_msg.opcode==arp.ARP_REQUEST:  
+        #Función que procesa los paquetes ARP que llegan a las interfaces virtuales
+
+        if arp_msg.opcode==arp.ARP_REQUEST:
+            #Si se trata de un ARP_Request para el router
+            #Construir la respuesta y devolverlo por el puerto de entrada
             e = ethernet.ethernet(dst=arp_msg.src_mac,
                           src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0],
                           ethertype=ether.ETH_TYPE_ARP)
@@ -200,8 +204,11 @@ class L2Forwarding(app_manager.RyuApp):
             p.add_protocol(e)
             p.add_protocol(a)
             self.send_packet(datapath, in_port,p)
-        #Procesar un ARPReply para hacer enrutamiento
+        
         elif arp_msg.opcode==arp.ARP_REPLY:
+            #Si se trata de una respuesta de ARP
+            #Tenemos que añadir la informacion nueva
+            # yprocesar los paquetes que teniamos esperando
             for paquetes in self.colaespera: #Buscamos en la lista para ver si hay paquetes en espera
                 pkt_ipv4=paquetes.get_protocol(ipv4.ipv4) 
                 if(pkt_ipv4):
@@ -224,7 +231,9 @@ class L2Forwarding(app_manager.RyuApp):
                         datapath.send_msg(out)
                         
     def ICMPPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
+        #Función para procesar los paquetes ICMP que vienen a la interfaz
         if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
+            #Si es un echo request, construimos un echo reply y lo devolvemos.
             eer=ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
                         dst=pkt_ethernet.src,
                         src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0])
@@ -251,7 +260,7 @@ class L2Forwarding(app_manager.RyuApp):
         ofproto = datapath.ofproto # Protocolo utilizado que se fija en una etapa 
                                    # de negociacion entre controlador y switch
         ofp_parser=datapath.ofproto_parser # Parser con la version OF
-                       # correspondiente
+                                    # correspondiente
 
         in_port = msg.match['in_port'] # Puerto de entrada.
 
@@ -261,13 +270,10 @@ class L2Forwarding(app_manager.RyuApp):
         pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
         
         #src = eth.src
-        port =in_port
+        port=in_port
         if port not in self.port_ip_mac.keys():
             self.port_ip_mac[port]=(pkt_ipv4.src,eth.src)
         
-        
-        print("Oh is a packet!")
-        #print(eth);
         if eth.ethertype==0x0800: #Si es IP
             entradas_router = self.interfaces_virtuales.keys()
             listacoincide=[]
@@ -322,9 +328,8 @@ class L2Forwarding(app_manager.RyuApp):
         # Ahora analizamos el paquete utilizando las clases de la libreria packet.
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocol(ethernet.ethernet)
-        print("ETH: ", eth)
-        # Extraemos la MAC de destino
 
+        # Extraemos la MAC de destino
         dst = eth.dst  
         print("MAC DE DESTINO: ", dst)
         #Extramos la MAC de origen
@@ -332,22 +337,20 @@ class L2Forwarding(app_manager.RyuApp):
         print("MAC DE ORIGEN: ", src)
         
         if src not in self.mac_to_port.keys():
-            print("NO TENGO EL ORIGEN")
+            print("NO TENGO LA MAC DE ORIGEN EN MI TABLA, LA ANOTARÉ")
             self.mac_to_port[src]=in_port
-        
-        
+
         if haddr_to_bin(dst) == mac.BROADCAST or mac.is_multicast(haddr_to_bin(dst)):
-            # Creamos el conjunto de acciones: FLOOD PENE
-            
+            # Creamos el conjunto de acciones:
             if eth.ethertype==ether.ETH_TYPE_ARP:
                 pkt_arp=pkt.get_protocol(arp.arp)
                 print("ARP POR BROADCAST!!")
                 #for INTERFACE in self.interfaces_virtuales.keys():
                 if self.paraipinterfaz(pkt_arp.dst_ip):
-                    print("ES PA TI RESPONDE A ESE ARP")
+                    print("ES PARA ALGUNA SVI, DEBEMOS RESPONDER")
                     self.ARPPacket(pkt_arp,in_port,datapath)
                 else: 
-                    print("Retransmito ese arp cual swtich normal")
+                    print("NO ES PARA MI, LO REENVIO DENTRO LA VLAN")
                     actions = []
                     print("-------------------------------------------------------")
                     for j in self.tabla_vlan.keys():
@@ -355,9 +358,7 @@ class L2Forwarding(app_manager.RyuApp):
                         if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port :
                             actions.append(ofp_parser.OFPActionOutput(j))
                             print("Vlan ", self.tabla_vlan.get(j),"puerto de entrada", in_port, "otros puertos ", j)
-                    # Ahora creamos el match  
-                    # fijando los valores de los campos 
-                    # que queremos casar.
+                    # Ahora creamos el match fijando los valores de los campos que queremos casar.
                     match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
                     # Creamos el conjunto de instrucciones.
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
