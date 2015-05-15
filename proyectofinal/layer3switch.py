@@ -19,7 +19,7 @@ import Queue #Libreria de cola
 import ipaddr
 import ipaddress
 
-class L2Forwarding(app_manager.RyuApp):
+class L3Switch(app_manager.RyuApp):
 
 #El flujo del programa empieza en la linea 308
 #----------------------------------------------
@@ -105,7 +105,7 @@ class L2Forwarding(app_manager.RyuApp):
 #-------------------------------------------------------
 
     def __init__(self, *args, **kwargs):
-        super(L2Forwarding, self).__init__(*args, **kwargs)
+        super(L3Switch, self).__init__(*args, **kwargs)
         self.lectura_vlan()
         self.lectura_interfaces()
         
@@ -142,7 +142,7 @@ class L2Forwarding(app_manager.RyuApp):
         adecuada=None
         for interfaz in self.interfaces_virtuales.keys():
             if self.interfaces_virtuales.get(interfaz)[0]==mac:
-                presente=adecuada
+                adecuada=interfaz
         return adecuada
 
     def forwardPortsSameVlan(self,ofp_parser,in_port):
@@ -291,9 +291,9 @@ class L2Forwarding(app_manager.RyuApp):
 
         listacoincide=[]
         for vlanids in self.interfaces_virtuales.keys() :
-            if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(self.interfaces_virtuales.get(vlainds)[2]+"/"+ self.interfaces_virtuales.get(vlainds)[1]):
-                mask=IPAddress(self.interfaces_virtuales.get(vlainds)[1]).bin
-                listacoincide.append((mask,vlainds))
+            if  ipaddr.IPv4Address(pkt_ipv4.dst) in  ipaddr.IPv4Network(self.interfaces_virtuales.get(vlanids)[2]+"/"+ self.interfaces_virtuales.get(vlanids)[1]):
+                mask=IPAddress(self.interfaces_virtuales.get(vlanids)[1]).bin
+                listacoincide.append((mask,vlanids))
                         
         vlanids=self.compare(listacoincide)
         if(pkt_ipv4.src not in self.ip_mac): 
@@ -302,7 +302,7 @@ class L2Forwarding(app_manager.RyuApp):
             print("DON'T KNOWN DESTINATION MAC, MAKING ARP FOR IT")
             self.colaespera.append(pkt)
             for puertos in self.tabla_vlan.keys() :
-                if self.tabla_vlan.get(puertos)==vlainds:
+                if self.tabla_vlan.get(puertos)==vlanids:
                     self.buildArpRequestPacket(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
         else: #Si tenemos la mac en cache
             print("I HAVE ALL THE PARAMETERS FOR FORWARDING IT")
@@ -310,7 +310,7 @@ class L2Forwarding(app_manager.RyuApp):
             for puerto_salida in self.port_ip_mac.keys():
                 if self.port_ip_mac.get(puerto_salida)[0]==pkt_ipv4.dst:
                     actions =[ofp_parser.OFPActionSetField(eth_dst=self.ip_mac[pkt_ipv4.dst]),
-                                ofp_parser.OFPActionSetField(eth_src=self.interfaces_virtuales.get(vlainds)[0]),
+                                ofp_parser.OFPActionSetField(eth_src=self.interfaces_virtuales.get(vlanids)[0]),
                                 ofp_parser.OFPActionOutput(puerto_salida)]
                                 
                     match = ofp_parser.OFPMatch(ipv4_dst=pkt_ipv4.dst)
@@ -369,7 +369,7 @@ class L2Forwarding(app_manager.RyuApp):
             #Si la mac de destino es la interfaz, tendremos que hacer otras comprobaciones
                 pkt_arp=pkt.get_protocol(arp.arp)
                 print("Para alguna interfaz virtual")
-                INTERFACE=self.macCualInterfaz(dst)
+                INTERFACE=interfazdestino
 
                 if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
                     if eth.ethertype==0x0800: #Si es IP
