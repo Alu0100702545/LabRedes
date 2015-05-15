@@ -141,7 +141,7 @@ class L2Forwarding(app_manager.RyuApp):
         #y de que interfaz se trata
         adecuada=None
         for interfaz in self.interfaces_virtuales.keys():
-            if self.interfaces_virtuales.get(INTERFACE)[0]==mac:
+            if self.interfaces_virtuales.get(interfaz)[0]==mac:
                 presente=adecuada
         return adecuada
 
@@ -151,7 +151,7 @@ class L2Forwarding(app_manager.RyuApp):
         lista=[]
         for j in self.tabla_vlan.keys():
             if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port:
-                lista.append[ofp_parser.OFPActionOutput(j)]
+                lista.append(ofp_parser.OFPActionOutput(j))
                 print ("FORWARDING TO: ", j)
         return lista
 
@@ -173,17 +173,17 @@ class L2Forwarding(app_manager.RyuApp):
         print(mod)
         datapath.send_msg(mod)
 
-    def addForwardVlanFlow(self,datapath,ofproto,ofp_parser,dst,src,port):
+    def addForwardVlanFlow(self,datapath,ofproto,ofp_parser,dst,src,port,msg):
         print("IT'S NOT FOR ME I WILL FORWARD IT THROUGH THE VLAN") 
         print("-------------------------------------------------------")
-        actions = self.forwardPortSameVlan(in_port)  
+        actions = self.forwardPortsSameVlan(ofp_parser,port)  
         print("-------------------------------------------------------")
         match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
         inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
         datapath.send_msg(mod)      
 #--------------------------------------------------------------------------------------
-    def buildArpRequestPacket()(self,dest_ip,source_ip,port,datapath):
+    def buildArpRequestPacket(self,dest_ip,source_ip,port,datapath):
         #Funcion para enviar un paquete ARP
         e = ethernet.ethernet(dst=mac.BROADCAST_STR ,
                       src=self.interfaces_virtuales.get(self.tabla_vlan[port])[0],
@@ -303,7 +303,7 @@ class L2Forwarding(app_manager.RyuApp):
             self.colaespera.append(pkt)
             for puertos in self.tabla_vlan.keys() :
                 if self.tabla_vlan.get(puertos)==vlainds:
-                    self.buildArpRequestPacket()(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
+                    self.buildArpRequestPacket(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
         else: #Si tenemos la mac en cache
             print("I HAVE ALL THE PARAMETERS FOR FORWARDING IT")
 
@@ -351,50 +351,50 @@ class L2Forwarding(app_manager.RyuApp):
                 print("ARP CAME BY BROADCAST")
                 if self.paraipinterfaz(pkt_arp.dst_ip)!=None:
                     print("IT'S FOR A SVI, WE SHOULD ANSWER THAT")
-                    self.handleArpPacket()(pkt_arp,in_port,datapath)
+                    self.handleArpPacket(pkt_arp,in_port,datapath)
                 else:
                     print("NORMAL BROADCAST")
                     #We just have to fordward the packet thourgh the ports
                     #in the same vlan as the in_port
-                    self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port)
+                    self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port,msg)
             else: 
                 print("NORMAL BROADCAST")
                 #We just have to fordward the packet thourgh the ports
                 #in the same vlan as the in_port 
-                self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port)
+                self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port,msg)
                 
         else:
             interfazdestino=self.paramacinterfaz(dst)
             if interfazdestino!=None:
             #Si la mac de destino es la interfaz, tendremos que hacer otras comprobaciones
-            pkt_arp=pkt.get_protocol(arp.arp)
-            print("Para alguna interfaz virtual")
-            INTERFACE=self.macCualInterfaz(dst)
+                pkt_arp=pkt.get_protocol(arp.arp)
+                print("Para alguna interfaz virtual")
+                INTERFACE=self.macCualInterfaz(dst)
 
-            if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
-                if eth.ethertype==0x0800: #Si es IP
-                    pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
-                    if self.paraipinterfaz(pkt_ipv4.dst):
-                        pkt_icmp=pkt.get_protocol(icmp.icmp)
-                        if (pkt_icmp): #Si es ICMP
-                            print("ESE IP ES PARA MI, RESPONDERE")
-                            self.handleIcmpPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+                if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
+                    if eth.ethertype==0x0800: #Si es IP
+                        pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
+                        if self.paraipinterfaz(pkt_ipv4.dst):
+                            pkt_icmp=pkt.get_protocol(icmp.icmp)
+                            if (pkt_icmp): #Si es ICMP
+                                print("ESE IP ES PARA MI, RESPONDERE")
+                                self.handleIcmpPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
+                            else:
+                                self.drop
                         else:
-                            self.drop
-                    else:
-                        print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
-                        #We add the entry to the table 0 who makes the GoTo to the table 1
-                        match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0],ipv4_dst=pkt_ipv4.dst)
-                        goto = ofp_parser.OFPInstructionGotoTable(1)
-                        mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=msg.buffer_id)
-                        datapath.send_msg(mod)
-                        #And we process the packet for routing
-                        self.paquete_para_enrutar(ev)
+                            print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
+                            #We add the entry to the table 0 who makes the GoTo to the table 1
+                            match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0],ipv4_dst=pkt_ipv4.dst)
+                            goto = ofp_parser.OFPInstructionGotoTable(1)
+                            mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=msg.buffer_id)
+                            datapath.send_msg(mod)
+                            #And we process the packet for routing
+                            self.paquete_para_enrutar(ev)
 
-                elif eth.ethertype==ether.ETH_TYPE_ARP:
-                    print("AN ARP FOR ME, I WILL MANAGE THAT")
-                    pkt_arp=pkt.get_protocol(arp.arp)
-                    self.handleArpPacket()(pkt_arp,in_port,datapath)
+                    elif eth.ethertype==ether.ETH_TYPE_ARP:
+                        print("AN ARP FOR ME, I WILL MANAGE THAT")
+                        pkt_arp=pkt.get_protocol(arp.arp)
+                        self.handleArpPacket(pkt_arp,in_port,datapath)
 
             #If the packet isn't going to the interface
             #it might go to the same vlan, so we have to forward it      
@@ -402,14 +402,14 @@ class L2Forwarding(app_manager.RyuApp):
                 if dst not in self.mac_to_port.keys() :
                     print("I DON'T KNOW THAT MAC ", dst)
                     print("IN THE VLAN ", self.tabla_vlan.get(in_port), " WHO HAS MAC: ", dst,"?")
-                    actions = self.forwardPortSameVlan()
+                    actions = self.forwardPortsSameVlan(ofp_parser,in_port)
                     req = ofp_parser.OFPPacketOut(datapath=datapath, buffer_id=ofproto.OFP_NO_BUFFER,
                                                   in_port=in_port, actions=actions, data=msg.data)
                     datapath.send_msg(req)
                     
                 else:
-                    puertodestino=self.mac_to_port[dst])
-                    if self.tabla_vlan.get(self.mac_to_port.get(src)) == puertodestino) :
+                    puertodestino=self.mac_to_port[dst]
+                    if self.tabla_vlan.get(self.mac_to_port.get(src)) == self.tabla_vlan.get(puertodestino) :
                         #We know the macs, and we know they are on the same vlan
                         #Direct forwarding
                         actions = [ofp_parser.OFPActionOutput(puertodestino)]
