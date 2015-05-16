@@ -44,3 +44,55 @@ Primero ver por que puerta lo vamos a enviar. cuando tengamos esto
 enviamos un mensaje ARP y guardamos dicho oaquete
 en un lista. cuando no llegue un mensaje de ARP_REPLY buscamos en la cola 
 el/los que tenga la misma ip y lo enviamos con la mac que recibamos
+
+	
+#actions = []
+#print("Tirando paquete!!")
+
+# Ahora creamos el match  
+# fijando los valores de los campos 
+# que queremos casar.
+#match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
+
+# Creamos el conjunto de instrucciones.
+#inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
+# Creamos el mensaje OpenFlow 
+#mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
+
+# Enviamos el mensaje.
+#datapath.send_msg(mod)
+
+#Dos tablas de flujo: 
+#
+#Para añadir una tabla req = ofp_parser.OFPTableMod(datapath, 1, 3
+#Para añadir entradas a una tabla FlowMod tiene un valor table_id que dice a que tabla se añadira
+#Para redirigir a una tabla, hay una instruccion especifica goto = parser.OFPInstructionGotoTable(1)
+#
+#Campos a añadir al paquete para el enrutamiento
+#vlan_vid 
+#vlanpcp
+#eth_type ??
+#La puta biblia
+#http://ryu.readthedocs.org/en/latest/ofproto_v1_3_ref.html
+#
+#
+#
+#Aqui habla de virtual routing and forwarding 
+#https://www.opennetworking.org/images/stories/downloads/sdn-resources/technical-reports/TR_Multiple_Flow_Tables_and_TTPs.pdf
+
+
+#Si no va a tu vlan, TABLA 1: reenvias el paquete a la interfaz virtual (que tiene una direccion mac conocida)
+#Si un paquete va a una interfaz virtual propia, hay que enrutarlo, como los canales son comunes hay que construir el paquete entramado ?? (Esto es necesario?)
+#Aqui lo explica
+#http://www.cisco.com/c/en/us/support/docs/switches/catalyst-6000-series-switches/41263-catmac-41263.html#topic1
+#Lo que hacen es que solo usan una mac, y le ponen la misma mac a todas las interfaces virtuales
+#xDDD
+#
+#MIRAD ESTO
+#----------------------------------------!!
+
+#Oye, yo tengo ahora una crisis mu fuerte
+#¿Si no tenemos la mac de destino, como podemos hacer ping a cualquier dirección?
+#Quiero decir, ¿como se encapsula?
+#Porque un arp a otra vlan no puedes hacer, ¿no? xD

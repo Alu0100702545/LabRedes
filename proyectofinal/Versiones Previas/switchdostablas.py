@@ -68,20 +68,21 @@ class L2Forwarding(app_manager.RyuApp):
 		req = ofp_parser.OFPPacketOut(datapath, msg.buffer_id, in_port, actions, data=msg.data)
 		datapath.send_msg(req)
 
-	else :
-		actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
-
+	else:
+	    match = ofp_parser.OFPMatch(eth_dst=dst)
+        inst = [ofp_parser.OFPInstructionGotoTable(1)]
+        mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, 
+              match=match, instructions=inst,idle_timeout=40, buffer_id=ofproto.OFP_NO_BUFFER)
+        datapath.send_msg(mod)
 		# Ahora creamos el match  
 		# fijando los valores de los campos 
 		# que queremos casar.
-		match = ofp_parser.OFPMatch(eth_dst=dst)
-
+        actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
+        match = ofp_parser.OFPMatch(eth_dst=dst)
 		# Creamos el conjunto de instrucciones.
-		inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-
+        inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 		# Creamos el mensaje OpenFlow 
-		mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
-
+        mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, match=match, instructions=inst, idle_timeout=40, buffer_id=msg.buffer_id)
 		# Enviamos el mensaje.
-		datapath.send_msg(mod)
+        datapath.send_msg(mod)
 
