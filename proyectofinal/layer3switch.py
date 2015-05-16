@@ -21,18 +21,16 @@ import ipaddress
 
 class L3Switch(app_manager.RyuApp):
 
-#El flujo del programa empieza en la linea 308
-#----------------------------------------------
-#Atributos:
-#----------------------------------------------
+
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    mac_to_port = dict()          #Diccionario para switch basico
-    tabla_vlan = dict()           #Diccionario para asociar vlan y puertos 
-    port_ip_mac =dict()           #Diccionario para reenviar los paquetes en enrutamiento
-    interfaces_virtuales = dict() #Diccionario para definir las interfaces virtuales de la vlan
+    mac_to_port = dict()          #Dictionary for basic switch
+    tabla_vlan = dict()           #Dictionary that links vlan and ports
+    port_ip_mac =dict()           #Dictionary for routing
+    interfaces_virtuales = dict() #Dictionary that establishes the basic interfaces
                     
     ip_mac = {}       #Tabla de enrutamiento
-    colaespera = []               #Atributo que guarda la cola
+    colaespera = []   #Queue for packets that we must route and we do not know the destination mac
+    first=False #Boolean value for adding Goto
     
 
 #-------------------------------------------------------
@@ -214,6 +212,8 @@ class L3Switch(app_manager.RyuApp):
         if arp_msg.opcode==arp.ARP_REQUEST:
             #Si se trata de un ARP_Request para el router
             #Construir la respuesta y devolverlo por el puerto de entrada
+            #Good moment for learn, we will save the port, the ip and the mac
+            self.port_ip_mac[in_port]=[arp_msg.src_ip,arp_msg.src_mac]
             print("SOMEONE NEEDS KNOW ONE OF THE SVI MAC'S I WILL GIVE HIM")
             e = ethernet.ethernet(dst=arp_msg.src_mac,
                           src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0],
@@ -227,10 +227,11 @@ class L3Switch(app_manager.RyuApp):
             self.sendPacket(datapath, in_port,p)
         
         elif arp_msg.opcode==arp.ARP_REPLY:
-            #Si se trata de una respuesta de ARP
-            #Tenemos que añadir la informacion nueva
-            # yprocesar los paquetes que teniamos esperando
-            #Si llega un ARP_Reply es momento de aprender
+            #If it is a reply, we must save the new info
+            #and forward the waiting packets
+            #Good moment for learn, we will save the port, the ip and the mac
+            print("IT'S AND ARP_REPLY I WILL SAVE THIS INFO")
+            print("PORT: ",in_port," SRC IP: ", arp_msg.src_ip, " MAC: ", arp_msg.src_mac)
             self.port_ip_mac[in_port]=[arp_msg.src_ip,arp_msg.src_mac]
             #Ahora revisamos si tenemos paquetes en la cola de espera que necesiten ir a esos lugares
             for paquetes in self.colaespera: #Buscamos en la lista para ver si hay paquetes en espera
@@ -277,9 +278,8 @@ class L3Switch(app_manager.RyuApp):
     
             self.sendPacket(datapath, in_port, p)
               
-    def paquete_para_enrutar(self, ev):
+    def paquete_para_enrutar(self, msg):
       
-        msg = ev.msg               
         datapath = msg.datapath    
         ofproto = datapath.ofproto  
         ofp_parser=datapath.ofproto_parser 
@@ -315,16 +315,26 @@ class L3Switch(app_manager.RyuApp):
 
             for puerto_salida in self.port_ip_mac.keys():
                 if self.port_ip_mac.get(puerto_salida)[0]==pkt_ipv4.dst:
-                    actions =[ofp_parser.OFPActionSetField(eth_dst=self.port_ip_mac[puerto_salida][1]),
+                    print("IT'S A PACKET FOR THE PORT ",puerto_salida)
+                    actions = [ofp_parser.OFPActionSetField(eth_dst=self.port_ip_mac[puerto_salida][1]),
                                 ofp_parser.OFPActionSetField(eth_src=self.interfaces_virtuales.get(vlanids)[0]),
                                 ofp_parser.OFPActionOutput(puerto_salida)]
                                 
-                    match = ofp_parser.OFPMatch(ipv4_dst=pkt_ipv4.dst)
+                    match = ofp_parser.OFPMatch(ipv4_dst=pkt_ipv4.dst,eth_type=ether.ETH_TYPE_IP) #seems ok
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                    mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0, match=match,table_id=1,instructions=inst,buffer_id=msg.buffer_id)
+                    mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, 
+                    match=match, instructions=inst, buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
                     print(mod)
                     datapath.send_msg(mod)
                     print("ADDING ENTRY AT FLOW TABLE 1 TO MANAGE THAT ROUTING")
+                    #Example from switch 2 tables
+                    #match = ofp_parser.OFPMatch(eth_dst=dst)
+                    #actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
+                    #inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+                    #mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, 
+                    #match=match, instructions=inst, idle_timeout=40, buffer_id=msg.buffer_id)
+                    # Enviamos el mensaje.
+                    #datapath.send_msg(mod)
 
         
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -349,6 +359,7 @@ class L3Switch(app_manager.RyuApp):
         dst = eth.dst #Destiny MAC
         print("SOURCE MAC: ", src)
         print("DESTINY MAC: ", dst)
+        
         if src not in self.mac_to_port.keys():
             print("I DON'T KNOW THAT MAC, SAVING MAC-PORT")
             self.mac_to_port[src]=in_port
@@ -401,11 +412,11 @@ class L3Switch(app_manager.RyuApp):
                             print("ALL THIS PACKET SHOULD BE PROCESSED ON THE TABLE 1 ADDING GOTO")
                             match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0])
                             goto = ofp_parser.OFPInstructionGotoTable(1)
-                            mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=ofproto.OFP_NO_BUFFER)
+                            mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
+                            print(mod)
                             datapath.send_msg(mod)
                             #And we process the packet for routing
-                            
-                            self.paquete_para_enrutar(ev)
+                            self.paquete_para_enrutar(msg)
 
                     elif eth.ethertype==ether.ETH_TYPE_ARP:
                         print("AN ARP FOR ME, I WILL MANAGE THAT")
