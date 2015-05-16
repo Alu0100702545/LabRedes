@@ -27,16 +27,14 @@ class L3Switch(app_manager.RyuApp):
     tabla_vlan = dict()           #Dictionary that links vlan and ports
     port_ip_mac =dict()           #Dictionary for routing
     interfaces_virtuales = dict() #Dictionary that establishes the basic interfaces
-                    
-    ip_mac = {}       #Tabla de enrutamiento
     colaespera = []   #Queue for packets that we must route and we do not know the destination mac
-    first=False #Boolean value for adding Goto
     
 
 #-------------------------------------------------------
-#Funciones de lectura desde los ficheros auxiliares:
+#Load Functions
 
     def lectura_vlan(self):
+        #This funcion reads the vlan from the file vlan.vf
         infile = open('vlan.vf', 'r')
         
         for line in infile:
@@ -63,6 +61,8 @@ class L3Switch(app_manager.RyuApp):
 
 
     def lectura_interfaces(self):
+        #This function reads the interfaces related to he vlans from the file
+        #interfaces.if
         infile = open('interfaces.if', 'r')
         
         for line in infile:
@@ -108,10 +108,10 @@ class L3Switch(app_manager.RyuApp):
         self.lectura_interfaces()
         
 #------------------------------------------------------------- 
-#Funciones de ayuda para operaciones repetitivas:
+#Help functions for repetetitive tasks
 
     def compare(self,MASK_LIST):
-        #Funcion que te dice cual es la mayor mascara aplicable
+        #Function that calculate the higher mask that can be applied
         cont=0
         maximo=0
         port=0
@@ -125,27 +125,27 @@ class L3Switch(app_manager.RyuApp):
                 
         return port
         
-    def paraipinterfaz(self,ip):
-        #Funcion para saber si un paquete ip va dirigido a las interfaces virtuales
-        #y de que interfaz se trata
-        adecuada=None
-        for interfaz in self.interfaces_virtuales.keys():
-            if self.interfaces_virtuales.get(interfaz)[2]==ip:
-                adecuada=interfaz
-        return adecuada
+    def paraIpInterfaz(self,ip):
+        #This function is for knowing if the destination ip of a  packet
+        #is one of the svi and which one is
+        interfaz=None
+        for i in self.interfaces_virtuales.keys():
+            if self.interfaces_virtuales.get(i)[2]==ip:
+                interfaz=i
+        return interfaz
         
-    def paramacinterfaz(self,mac):
-        #Función para saber si la mac de un paquete va dirigida a la interfaz
-        #y de que interfaz se trata
-        adecuada=None
-        for interfaz in self.interfaces_virtuales.keys():
-            if self.interfaces_virtuales.get(interfaz)[0]==mac:
-                adecuada=interfaz
-        return adecuada
+    def paraMacInterfaz(self,mac):
+        #This function is for knowing if the destination mac of a packet
+        #is one of the svi and which one is
+        interfaz=None
+        for i in self.interfaces_virtuales.keys():
+            if self.interfaces_virtuales.get(i)[0]==mac:
+                interfaz=i
+        return interfaz
 
     def forwardPortsSameVlan(self,ofp_parser,in_port):
-        #This function returns a list of ports that are in the same vlan 
-        #than in_port
+        #This function returns a list of action that sent the packet
+        #to the ports that are in the same vlan as in_port
         lista=[]
         for j in self.tabla_vlan.keys():
             if self.tabla_vlan.get(j)==self.tabla_vlan.get(in_port) and j !=in_port:
@@ -153,25 +153,8 @@ class L3Switch(app_manager.RyuApp):
                 print ("FORWARDING TO: ", j)
         return lista
 
-
-#-------------------------------------------------------------------------------------
-#Funcion para añadir un flujo a la tabla de datos
-    def add_flow(self, datapath, priority, match, actions,table_id=0 ,buffer_id=None):
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
-        if buffer_id:
-            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
-                priority=priority, match=match,
-                instructions=inst, idle_timeout=30,command=ofproto.OFPFC_ADD)
-        else:
-            mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                    match=match,table_id=table_id, instructions=inst, 
-                    idle_timeout=30,command=ofproto.OFPFC_ADD)
-        print(mod)
-        datapath.send_msg(mod)
-
     def addForwardVlanFlow(self,datapath,ofproto,ofp_parser,dst,src,port,msg):
+        #This funcion add a flow entry for forward the packets on the same vlan
         print("IT'S NOT FOR ME I WILL FORWARD IT THROUGH THE VLAN") 
         print("-------------------------------------------------------")
         actions = self.forwardPortsSameVlan(ofp_parser,port)  
@@ -179,10 +162,14 @@ class L3Switch(app_manager.RyuApp):
         match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
         inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
         mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
-        datapath.send_msg(mod)      
+        datapath.send_msg(mod)
+
+
 #--------------------------------------------------------------------------------------
+#Routing functions
+
     def buildArpRequestPacket(self,dest_ip,source_ip,port,datapath):
-        #Funcion para enviar un paquete ARP
+        #This function does what it's name says
         e = ethernet.ethernet(dst=mac.BROADCAST_STR ,
                       src=self.interfaces_virtuales.get(self.tabla_vlan[port])[0],
                       ethertype=ether.ETH_TYPE_ARP)
@@ -208,10 +195,9 @@ class L3Switch(app_manager.RyuApp):
         datapath.send_msg(out)
 
     def handleArpPacket(self,arp_msg,in_port,datapath):
-        #Función que procesa los paquetes ARP que llegan a las interfaces virtuales
+        #Function that manages the ARP packets that comes virtual interfaces
         if arp_msg.opcode==arp.ARP_REQUEST:
-            #Si se trata de un ARP_Request para el router
-            #Construir la respuesta y devolverlo por el puerto de entrada
+            #If there is a request, we have to build the answer and send it
             #Good moment for learn, we will save the port, the ip and the mac
             self.port_ip_mac[in_port]=[arp_msg.src_ip,arp_msg.src_mac]
             print("SOMEONE NEEDS KNOW ONE OF THE SVI MAC'S I WILL GIVE HIM")
@@ -233,11 +219,11 @@ class L3Switch(app_manager.RyuApp):
             print("IT'S AND ARP_REPLY I WILL SAVE THIS INFO")
             print("PORT: ",in_port," SRC IP: ", arp_msg.src_ip, " MAC: ", arp_msg.src_mac)
             self.port_ip_mac[in_port]=[arp_msg.src_ip,arp_msg.src_mac]
-            #Ahora revisamos si tenemos paquetes en la cola de espera que necesiten ir a esos lugares
-            for paquetes in self.colaespera: #Buscamos en la lista para ver si hay paquetes en espera
+            #Now we have to check al the packets in the queue that we can forward
+            for paquetes in self.colaespera:
                 pkt_ipv4=paquetes.get_protocol(ipv4.ipv4) 
                 if(pkt_ipv4):
-                    if (pkt_ipv4.dst==arp_msg.src_ip): #Si la ip de destino del paquete coincide con quien envio esa ip
+                    if (pkt_ipv4.dst==arp_msg.src_ip): 
                         self.colaespera.remove(paquetes)
                         ofproto = datapath.ofproto
                         ofp_parser = datapath.ofproto_parser
@@ -256,9 +242,8 @@ class L3Switch(app_manager.RyuApp):
                         #Tambien debemos añadir el flujo
                         
     def handleIcmpPacket(self, datapath, in_port, pkt_ethernet, pkt_ipv4, pkt_icmp):
-        #Función para procesar los paquetes ICMP que vienen a la interfaz
+        #This function builds an ICMP echo reply for the echo request received
         if pkt_icmp.type == icmp.ICMP_ECHO_REQUEST:
-            #Si es un echo request, construimos un echo reply y lo devolvemos.
             eer=ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
                         dst=pkt_ethernet.src,
                         src=self.interfaces_virtuales[self.tabla_vlan[in_port]][0])
@@ -279,7 +264,9 @@ class L3Switch(app_manager.RyuApp):
             self.sendPacket(datapath, in_port, p)
               
     def paquete_para_enrutar(self, msg):
-      
+        #This function decides what is the higher mask
+        #to apply to the packet, and if it has all the variables
+        #it add's the flow for forwarding the packets
         datapath = msg.datapath    
         ofproto = datapath.ofproto  
         ofp_parser=datapath.ofproto_parser 
@@ -306,49 +293,42 @@ class L3Switch(app_manager.RyuApp):
                 yaesta=True
         if(yaesta==False):
             print("DON'T KNOWN DESTINATION MAC, MAKING ARP FOR IT")
+            #As we do not know the mac, we must build and ARP and save the packet
             self.colaespera.append(pkt)
             for puertos in self.tabla_vlan.keys() :
                 if self.tabla_vlan.get(puertos)==vlanids:
                     self.buildArpRequestPacket(pkt_ipv4.dst,pkt_ipv4.src,puertos,datapath)
-        else: #Si tenemos la mac en cache
+        else: #If we have the mac, we can apply the flow
             print("I HAVE THAT MAC IN CACHE")
-
             for puerto_salida in self.port_ip_mac.keys():
                 if self.port_ip_mac.get(puerto_salida)[0]==pkt_ipv4.dst:
                     print("IT'S A PACKET FOR THE PORT ",puerto_salida)
+                    #Now, we must forward the packet, switch the mac source to the interface of the vlan
+                    #switch the destination mac to the destination host, and send through the port
                     actions = [ofp_parser.OFPActionSetField(eth_dst=self.port_ip_mac[puerto_salida][1]),
                                 ofp_parser.OFPActionSetField(eth_src=self.interfaces_virtuales.get(vlanids)[0]),
                                 ofp_parser.OFPActionOutput(puerto_salida)]
                                 
-                    match = ofp_parser.OFPMatch(ipv4_dst=pkt_ipv4.dst,eth_type=ether.ETH_TYPE_IP) #seems ok
+                    match = ofp_parser.OFPMatch(eth_type=ether.ETH_TYPE_IP,ipv4_dst=pkt_ipv4.dst) 
+                    #The second match field is totally related to the first one
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                     mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, 
                     match=match, instructions=inst, buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
                     print(mod)
                     datapath.send_msg(mod)
                     print("ADDING ENTRY AT FLOW TABLE 1 TO MANAGE THAT ROUTING")
-                    #Example from switch 2 tables
-                    #match = ofp_parser.OFPMatch(eth_dst=dst)
-                    #actions = [ofp_parser.OFPActionOutput(self.mac_to_port[dst])]
-                    #inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                    #mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, 
-                    #match=match, instructions=inst, idle_timeout=40, buffer_id=msg.buffer_id)
-                    # Enviamos el mensaje.
-                    #datapath.send_msg(mod)
 
         
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
-        msg = ev.msg               # Objeto que representa la estuctura de datos PacketIn.
-        datapath = msg.datapath    # Identificador del datapath correspondiente al switch.
-        ofproto = datapath.ofproto # Protocolo utilizado que se fija en una etapa 
-                                   # de negociacion entre controlador y switch
-
-        ofp_parser=datapath.ofproto_parser # Parser con la version OF
-                                           # correspondiente
+        msg = ev.msg               
+        datapath = msg.datapath    
+        ofproto = datapath.ofproto 
+        ofp_parser=datapath.ofproto_parser 
+        
         print("===========================================================================")
         print("PAQUETE ENTRANTE")
-        in_port = msg.match['in_port'] # Puerto de entrada.
+        in_port = msg.match['in_port']
         print("PUERTO: ", in_port)
         # We extract the packet from the data
         pkt = packet.Packet(msg.data)
@@ -368,7 +348,7 @@ class L3Switch(app_manager.RyuApp):
             if eth.ethertype==ether.ETH_TYPE_ARP:
                 pkt_arp=pkt.get_protocol(arp.arp)
                 print("ARP CAME BY BROADCAST")
-                if self.paraipinterfaz(pkt_arp.dst_ip)!=None:
+                if self.paraIpInterfaz(pkt_arp.dst_ip)!=None:
                     print("IT'S FOR A SVI, WE SHOULD ANSWER THAT")
                     self.handleArpPacket(pkt_arp,in_port,datapath)
                 else:
@@ -383,45 +363,50 @@ class L3Switch(app_manager.RyuApp):
                 self.addForwardVlanFlow(datapath,ofproto,ofp_parser,dst,src,in_port,msg)
                 
         else:
-            interfazdestino=self.paramacinterfaz(dst)
+            interfazdestino=self.paraMacInterfaz(dst)
             if interfazdestino!=None:
-            #Si la mac de destino es la interfaz, tendremos que hacer otras comprobaciones
+            #If it goes for an svi, we have to check a few things more
                 pkt_arp=pkt.get_protocol(arp.arp)
                 print("THAT MAC IS FOR ANY SVI")
                 INTERFACE=interfazdestino
 
-                if(self.interfaces_virtuales.get(INTERFACE)[0]==dst):
-                    if eth.ethertype==0x0800: #Si es IP
-                        pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
-                        if self.paraipinterfaz(pkt_ipv4.dst):
-                            pkt_icmp=pkt.get_protocol(icmp.icmp)
-                            if (pkt_icmp): #Si es ICMP
-                                print("ESE IP ES PARA MI, RESPONDERE")
-                                self.handleIcmpPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
-                            else:
-                                #Ha llegado un paquete ip no icmp a la interfaz, deberiamos tirarlo
-                                actions=[]
-                                match = ofp_parser.OFPMatch(eth_dst=dst,ipv4_dst=pkt_ipv4.dst,ip_proto=pkt_ipv4.ip_proto)
-                                inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-                                mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=10, match=match, 
-                                                instructions=inst, buffer_id=msg.buffer_id)
-                                datapath.send_msg(mod)
+                if eth.ethertype==0x0800: 
+                    #We should check that is ip
+                    pkt_ipv4=pkt.get_protocol(ipv4.ipv4)
+                    if self.paraIpInterfaz(pkt_ipv4.dst):
+                        #If the destionation ip is the virtual interface
+                        #we must check that is ICMP
+                        pkt_icmp=pkt.get_protocol(icmp.icmp)
+                        if (pkt_icmp): 
+                            #If is ICMP we should manage that
+                            print("ESE IP ES PARA MI, RESPONDERE")
+                            self.handleIcmpPacket(datapath, in_port, eth, pkt_ipv4, pkt_icmp)
                         else:
-                            print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
-                            #We add the entry to the table 0 who makes the GoTo to the table 1
-                            print("ALL THIS PACKET SHOULD BE PROCESSED ON THE TABLE 1 ADDING GOTO")
-                            match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0])
-                            goto = ofp_parser.OFPInstructionGotoTable(1)
-                            mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
-                            print(mod)
+                            #An ip packet arrives to the interface and is not for it
+                            #We should drop it, for that we must add a rule with higher priority 
+                            #than the go to
+                            actions=[]
+                            match = ofp_parser.OFPMatch(eth_dst=dst,ipv4_dst=pkt_ipv4.dst,ip_proto=pkt_ipv4.ip_proto)
+                            inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+                            mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=10, match=match, 
+                                            instructions=inst, buffer_id=msg.buffer_id)
                             datapath.send_msg(mod)
-                            #And we process the packet for routing
-                            self.paquete_para_enrutar(msg)
+                    else:
+                        print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
+                        #We add the entry to the table 0 who makes the GoTo to the table 1
+                        print("ALL THIS PACKET SHOULD BE PROCESSED ON THE TABLE 1 ADDING GOTO")
+                        match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0])
+                        goto = ofp_parser.OFPInstructionGotoTable(1)
+                        mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
+                        print(mod)
+                        datapath.send_msg(mod)
+                        #And we process the packet for routing
+                        self.paquete_para_enrutar(msg)
 
-                    elif eth.ethertype==ether.ETH_TYPE_ARP:
-                        print("AN ARP FOR ME, I WILL MANAGE THAT")
-                        pkt_arp=pkt.get_protocol(arp.arp)
-                        self.handleArpPacket(pkt_arp,in_port,datapath)
+                elif eth.ethertype==ether.ETH_TYPE_ARP:
+                    print("AN ARP FOR ME, I WILL MANAGE THAT")
+                    pkt_arp=pkt.get_protocol(arp.arp)
+                    self.handleArpPacket(pkt_arp,in_port,datapath)
 
             #If the packet isn't going to the interface
             #it might go to the same vlan, so we have to forward it      
