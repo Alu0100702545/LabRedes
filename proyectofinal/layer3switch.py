@@ -161,7 +161,7 @@ class L3Switch(app_manager.RyuApp):
         print("-------------------------------------------------------")
         match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
         inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=30, buffer_id=msg.buffer_id)
+        mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, instructions=inst, idle_timeout=60, buffer_id=msg.buffer_id)
         datapath.send_msg(mod)
 
 
@@ -313,7 +313,7 @@ class L3Switch(app_manager.RyuApp):
                     #The second match field is totally related to the first one
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                     mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, table_id=1, 
-                    match=match, instructions=inst, buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
+                    match=match, instructions=inst, idle_timeout=60, buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
                     print(mod)
                     datapath.send_msg(mod)
                     print("ADDING ENTRY AT FLOW TABLE 1 TO MANAGE THAT ROUTING")
@@ -389,7 +389,7 @@ class L3Switch(app_manager.RyuApp):
                             match = ofp_parser.OFPMatch(eth_dst=dst,ipv4_dst=pkt_ipv4.dst,ip_proto=pkt_ipv4.ip_proto)
                             inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                             mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=10, match=match, 
-                                            instructions=inst, buffer_id=msg.buffer_id)
+                                            instructions=inst,idle_timeout=60 buffer_id=msg.buffer_id)
                             datapath.send_msg(mod)
                     else:
                         print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
@@ -397,7 +397,8 @@ class L3Switch(app_manager.RyuApp):
                         print("ALL THIS PACKET SHOULD BE PROCESSED ON THE TABLE 1 ADDING GOTO")
                         match = ofp_parser.OFPMatch(eth_dst=self.interfaces_virtuales.get(INTERFACE)[0])
                         goto = ofp_parser.OFPInstructionGotoTable(1)
-                        mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],buffer_id=ofproto.OFP_NO_BUFFER,command=ofproto.OFPFC_ADD)
+                        mod = ofp_parser.OFPFlowMod(datapath=datapath,priority=0,match=match,table_id=0,instructions=[goto],
+                            buffer_id=ofproto.OFP_NO_BUFFER,idle_timeout=60,command=ofproto.OFPFC_ADD)
                         print(mod)
                         datapath.send_msg(mod)
                         #And we process the packet for routing
@@ -435,6 +436,6 @@ class L3Switch(app_manager.RyuApp):
                     match = ofp_parser.OFPMatch(eth_dst=dst,eth_src=src)
                     inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                     mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=0, match=match, 
-                                                instructions=inst, buffer_id=msg.buffer_id)
+                                                instructions=inst, idle_timeout=60, buffer_id=msg.buffer_id)
                     datapath.send_msg(mod)
 
