@@ -389,7 +389,7 @@ class L3Switch(app_manager.RyuApp):
                             match = ofp_parser.OFPMatch(eth_dst=dst,ipv4_dst=pkt_ipv4.dst,ip_proto=pkt_ipv4.ip_proto)
                             inst = [ofp_parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                             mod = ofp_parser.OFPFlowMod(datapath=datapath, priority=10, match=match, 
-                                            instructions=inst,idle_timeout=60 buffer_id=msg.buffer_id)
+                                            instructions=inst,idle_timeout=60, buffer_id=msg.buffer_id)
                             datapath.send_msg(mod)
                     else:
                         print("THIS IS IP PACKET IS NOT FOR ME, I WILL ROUTE THAT")
